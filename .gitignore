@@ -1,0 +1,79 @@
+# Backend (Java/Spring Boot)
+backend/AnalyzerBack/HELP.md
+backend/AnalyzerBack/target/
+backend/AnalyzerBack/.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+backend/AnalyzerBack/.apt_generated
+backend/AnalyzerBack/.classpath
+backend/AnalyzerBack/.factorypath
+backend/AnalyzerBack/.project
+backend/AnalyzerBack/.settings
+backend/AnalyzerBack/.springBeans
+backend/AnalyzerBack/.sts4-cache
+
+### IntelliJ IDEA ###
+backend/AnalyzerBack/.idea
+backend/AnalyzerBack/*.iws
+backend/AnalyzerBack/*.iml
+backend/AnalyzerBack/*.ipr
+
+### NetBeans ###
+backend/AnalyzerBack/nbproject/private/
+backend/AnalyzerBack/nbbuild/
+backend/AnalyzerBack/dist/
+backend/AnalyzerBack/nbdist/
+backend/AnalyzerBack/.nb-gradle/
+backend/AnalyzerBack/build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### Backend Key Files ###
+backend/AnalyzerBack/src/main/resources/application-key.yml
+
+# Frontend (Vue/TypeScript)
+# Logs
+frontend/AnalyzerFront/logs
+frontend/AnalyzerFront/*.log
+frontend/AnalyzerFront/npm-debug.log*
+frontend/AnalyzerFront/yarn-debug.log*
+frontend/AnalyzerFront/yarn-error.log*
+frontend/AnalyzerFront/pnpm-debug.log*
+frontend/AnalyzerFront/lerna-debug.log*
+
+frontend/AnalyzerFront/node_modules
+frontend/AnalyzerFront/.DS_Store
+frontend/AnalyzerFront/dist
+frontend/AnalyzerFront/dist-ssr
+frontend/AnalyzerFront/coverage
+frontend/AnalyzerFront/*.local
+
+# Editor directories and files
+frontend/AnalyzerFront/.vscode/*
+!frontend/AnalyzerFront/.vscode/extensions.json
+frontend/AnalyzerFront/.idea
+frontend/AnalyzerFront/*.suo
+frontend/AnalyzerFront/*.ntvs*
+frontend/AnalyzerFront/*.njsproj
+frontend/AnalyzerFront/*.sln
+frontend/AnalyzerFront/*.sw?
+
+frontend/AnalyzerFront/*.tsbuildinfo
+
+frontend/AnalyzerFront/.eslintcache
+
+# Cypress
+frontend/AnalyzerFront/cypress/videos/
+frontend/AnalyzerFront/cypress/screenshots/
+
+# Vitest
+frontend/AnalyzerFront/__screenshots__/
+
+# Vite
+frontend/AnalyzerFront/*.timestamp-*-*.mjs
+
+# VS Code (全局)
+.vscode/
+
