@@ -8,7 +8,7 @@ server:
     threads:
       max: 300
       min-spare: 10
-  max-http-header-size: 500KB  # 请求头传参限制
+  max-http-request-header-size: 500KB
 
 ## 日志配置
 #logging:
@@ -23,7 +23,7 @@ spring:
       max-request-size: 100MB
   # 数据库mysql
   datasource:
-    url: jdbc:mysql://localhost:3306/intelligauge_data
+    url: jdbc:mysql://localhost:3306/resume_data
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver

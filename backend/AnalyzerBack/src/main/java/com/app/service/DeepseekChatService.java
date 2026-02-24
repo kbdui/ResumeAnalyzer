@@ -6,16 +6,27 @@ import com.app.tool.FileParserUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
 
+@Service
 public class DeepseekChatService {
-    DeepseekClient deepseekClient = new DeepseekClient();
-
+    
+    private final DeepseekClient deepseekClient;
+    
     // 用于在 Java 对象和 JSON 数据之间进行转换
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+    
+    // 使用构造函数注入
+    @Autowired
+    public DeepseekChatService(DeepseekClient deepseekClient, ObjectMapper objectMapper) {
+        this.deepseekClient = deepseekClient;
+        this.objectMapper = objectMapper;
+    }
 
     // 处理文件并转换简历内容格式
     public List<ResumeDTO> generateResumeDetailFromFile(

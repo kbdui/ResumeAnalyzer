@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import okhttp3.*;
 import com.app.request.DeepseekRequest;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
+@Component
 public class DeepseekClient {
     //如果使用硅基平台，API_URL修改为 "https://api.siliconflow.cn/v1/chat/completions"
     private static final String API_URL = "https://api.deepseek.com/v1/chat/completions";
