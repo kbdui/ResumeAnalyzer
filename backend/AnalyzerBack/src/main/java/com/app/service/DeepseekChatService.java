@@ -32,14 +32,13 @@ public class DeepseekChatService {
     public List<ResumeDTO> generateResumeDetailFromFile(
             String apiKey,
             MultipartFile file,
-            int questionCount,
             boolean useSiliconFlow) throws IOException {
 
         // 1. 解析文件内容
         String content = FileParserUtil.extractTextFromFile(file);
 
         // 2. 构建Prompt
-        String prompt = FileParserUtil.buildResumePrompt(content, questionCount);
+        String prompt = FileParserUtil.buildResumePrompt(content);
 
         // 3. 调用API
         String jsonResponse = deepseekClient.getResponse(apiKey, prompt, useSiliconFlow);
@@ -48,8 +47,18 @@ public class DeepseekChatService {
         return parseResumeResponse(jsonResponse);
     }
 
+    /**
+     * 简单对话：发送问题，返回大模型回复文本
+     * 使用 DeepseekClient.getResponse(apiKey, prompt) 两参方法
+     */
+    public String chat(String apiKey, String message) throws IOException {
+        String jsonResponse = deepseekClient.getResponse(apiKey, message);
+        JsonNode root = objectMapper.readTree(jsonResponse);
+        return root.path("choices").get(0).path("message").path("content").asText();
+    }
+
     // 解析API返回的数据
-    public List<ResumeDTO> parseResumeResponse(String jsonResponse) throws IOException {
+    private List<ResumeDTO> parseResumeResponse(String jsonResponse) throws IOException {
         // 解析整个API响应
         JsonNode rootNode = objectMapper.readTree(jsonResponse);
 
@@ -60,10 +69,9 @@ public class DeepseekChatService {
                 .path("content")
                 .asText();
 
-        // 为什么要这样拆开写呢
         JsonNode questionsNode = objectMapper.readTree(content).path("questions");
 
-        // 解析题目列表
+        // 解析
         return objectMapper.readValue(questionsNode.toString(), new TypeReference<List<ResumeDTO>>() {});
     }
 }

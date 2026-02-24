@@ -28,6 +28,15 @@ spring:
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+# DeepSeek 客户端配置（API 地址、超时、模型名）
+deepseek:
+  client:
+    api-url: https://api.deepseek.com/v1/chat/completions
+    connect-timeout: 30   # 连接超时（秒）
+    read-timeout: 60     # 读取超时（秒）
+    model:
+      chat: deepseek-chat
+      reasoner: deepseek-reasoner   # useSiliconFlow 时使用
 
 #  datasource:
 #    druid:

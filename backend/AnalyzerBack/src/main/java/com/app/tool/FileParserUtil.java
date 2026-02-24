@@ -173,9 +173,8 @@ public class FileParserUtil {
         return content.toString();
     }
 
-    // 构建题目生成Prompt
-    public static String buildResumePrompt(String content, int questionCount) {
-        return String.format(RESUME_PROMPT, questionCount) +
-                "\n\n文档内容：\n" + content;
+    // 构建Prompt
+    public static String buildResumePrompt(String content) {
+        return RESUME_PROMPT + "\n\n文档内容：\n" + content;
     }
 }
