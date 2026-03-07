@@ -1,9 +1,15 @@
 package com.app.web;
 
 import com.app.dto.ResumeDTO;
+import com.app.dto.ResumeTextDTO;
 import com.app.request.ChatRequest;
+import com.app.request.PythonMatchTaskRequest;
 import com.app.service.DeepseekChatService;
+import com.app.service.PythonService;
+import com.app.service.ResumeService;
+import com.app.service.ZipResumeService;
 import com.app.tool.ApiResponse;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
@@ -21,10 +27,13 @@ public class ChatController {
     private String apiKey;
 
     private final DeepseekChatService deepseekChatService;
+    private final ResumeService resumeService;
 
     @Autowired
-    public ChatController(DeepseekChatService deepseekChatService){
+    public ChatController(DeepseekChatService deepseekChatService,
+                          ResumeService resumeService){
         this.deepseekChatService = deepseekChatService;
+        this.resumeService = resumeService;
     }
 
     /**
@@ -48,11 +57,15 @@ public class ChatController {
      * 整理分析上传简历内的信息
      */
     @PostMapping("/extract")
-    public ApiResponse<List<ResumeDTO>> extractResumeDetail(
+    public ApiResponse<ResumeDTO> extractResumeDetail(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "model", defaultValue = "v3") String model) {
+            @RequestParam(value = "model", defaultValue = "v3") String model,
+            @RequestParam(value = "save", defaultValue = "false") boolean save) {
         try {
-            List<ResumeDTO> result = deepseekChatService.generateResumeDetailFromFile(apiKey, file, Objects.equals(model, "v3"));
+            ResumeDTO result = deepseekChatService.generateResumeDetailFromFile(apiKey, file, Objects.equals(model, "v3"));
+            if (save) {
+                resumeService.saveResume(result);
+            }
             return ApiResponse.success(result);
         } catch (IOException e) {
             return ApiResponse.error(500, "简历分析失败: " + e.getMessage());

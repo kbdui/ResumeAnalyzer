@@ -75,27 +75,40 @@ public class FileParserUtil {
         if (fileName == null) {
             throw new IllegalArgumentException("文件名不能为空");
         }
-
-        String extension = fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
         try (InputStream inputStream = file.getInputStream()) {
-            switch (extension) {
-                case "pdf":
-                    return parsePdf(inputStream);
-                case "ppt":
-                    return parseLegacyPpt(inputStream);
-                case "pptx":
-                    return parsePptx(inputStream);
-                case "doc":
-                    return parseDoc(inputStream);
-                case "docx":
-                    return parseDocx(inputStream);
-                case "txt":
-                case "md":
-                case "html":
-                    return parseText(inputStream);
-                default:
-                    throw new IllegalArgumentException("不支持的文件格式: " + extension);
-            }
+            return extractTextFromFileName(fileName, inputStream);
+        }
+    }
+
+    /**
+     * 按文件名后缀解析文本（用于 zip 内文件等场景）
+     */
+    public static String extractTextFromFileName(String fileName, InputStream inputStream) throws IOException {
+        if (fileName == null || fileName.isBlank()) {
+            throw new IllegalArgumentException("文件名不能为空");
+        }
+        int dot = fileName.lastIndexOf(".");
+        if (dot < 0 || dot == fileName.length() - 1) {
+            throw new IllegalArgumentException("无法识别文件后缀: " + fileName);
+        }
+        String extension = fileName.substring(dot + 1).toLowerCase();
+        switch (extension) {
+            case "pdf":
+                return parsePdf(inputStream);
+            case "ppt":
+                return parseLegacyPpt(inputStream);
+            case "pptx":
+                return parsePptx(inputStream);
+            case "doc":
+                return parseDoc(inputStream);
+            case "docx":
+                return parseDocx(inputStream);
+            case "txt":
+            case "md":
+            case "html":
+                return parseText(inputStream);
+            default:
+                throw new IllegalArgumentException("不支持的文件格式: " + extension);
         }
     }
 

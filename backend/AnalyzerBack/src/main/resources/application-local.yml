@@ -38,6 +38,10 @@ deepseek:
       chat: deepseek-chat
       reasoner: deepseek-reasoner   # useSiliconFlow 时使用
 
+python:
+  fastapi:
+    base-url: http://127.0.0.1:8000
+
 #  datasource:
 #    druid:
 #      driver-class-name: com.mysql.cj.jdbc.Driver

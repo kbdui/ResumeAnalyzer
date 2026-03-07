@@ -77,5 +77,18 @@ frontend/AnalyzerFront/*.timestamp-*-*.mjs
 # VS Code (全局)
 .vscode/
 
+# Backend (Python)
+backend/AnalyzerBack_python/.idea/
+backend/AnalyzerBack_python/*.iml
+backend/AnalyzerBack_python/.venv/
+backend/AnalyzerBack_python/venv/
+backend/AnalyzerBack_python/__pycache__/
+
+backend/analyzerBack_python/.idea/
+backend/analyzerBack_python/*.iml
+backend/analyzerBack_python/.venv/
+backend/analyzerBack_python/venv/
+backend/analyzerBack_python/__pycache__/
+
 # weekly journal
 weekJournal

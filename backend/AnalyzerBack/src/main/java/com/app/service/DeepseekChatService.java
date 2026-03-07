@@ -13,6 +13,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
+
+/**
+ * 调用deepseek接口的相关服务
+ */
 @Service
 public class DeepseekChatService {
     
@@ -28,14 +32,37 @@ public class DeepseekChatService {
         this.objectMapper = objectMapper;
     }
 
-    // 处理文件并转换简历内容格式
-    public List<ResumeDTO> generateResumeDetailFromFile(
+
+    /**
+     * 处理文件并转换简历内容格式
+     * 传入的简历格式为文件
+     */
+    public ResumeDTO generateResumeDetailFromFile(
             String apiKey,
             MultipartFile file,
             boolean useSiliconFlow) throws IOException {
 
         // 1. 解析文件内容
         String content = FileParserUtil.extractTextFromFile(file);
+
+        // 2. 构建Prompt
+        String prompt = FileParserUtil.buildResumePrompt(content);
+
+        // 3. 调用API
+        String jsonResponse = deepseekClient.getResponse(apiKey, prompt, useSiliconFlow);
+
+        // 4. 解析API响应
+        return parseResumeResponse(jsonResponse);
+    }
+
+    /**
+     * 处理文件并转换简历内容格式
+     * 传入的简历格式为文本
+     */
+    public ResumeDTO generateResumeDetailFromText(
+            String apiKey,
+            String content,
+            boolean useSiliconFlow) throws IOException {
 
         // 2. 构建Prompt
         String prompt = FileParserUtil.buildResumePrompt(content);
@@ -58,20 +85,18 @@ public class DeepseekChatService {
     }
 
     // 解析API返回的数据
-    private List<ResumeDTO> parseResumeResponse(String jsonResponse) throws IOException {
+    private ResumeDTO parseResumeResponse(String jsonResponse) throws IOException {
         // 解析整个API响应
         JsonNode rootNode = objectMapper.readTree(jsonResponse);
 
-        // 提取content字段（包含题目JSON数组）
+        // 提取content字段（大模型返回的 JSON 字符串）
         String content = rootNode.path("choices")
                 .get(0)
                 .path("message")
                 .path("content")
                 .asText();
 
-        JsonNode questionsNode = objectMapper.readTree(content).path("questions");
-
-        // 解析
-        return objectMapper.readValue(questionsNode.toString(), new TypeReference<List<ResumeDTO>>() {});
+        // 直接将 content 解析为单个 ResumeDTO
+        return objectMapper.readValue(content, ResumeDTO.class);
     }
 }

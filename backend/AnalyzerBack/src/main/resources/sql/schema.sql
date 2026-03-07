@@ -91,3 +91,66 @@ CREATE TABLE `project` (
     KEY `idx_project_resume_id` (`resume_id`),
     CONSTRAINT `fk_project_resume` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='项目经历表';
+
+-- ----------------------------
+-- 6. 任务表（一次 zip 上传视为一个 task）
+-- ----------------------------
+DROP TABLE IF EXISTS `task`;
+CREATE TABLE `task` (
+    `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id`       VARCHAR(64)   NOT NULL COMMENT '业务任务ID（如UUID）',
+    `python_task_id` VARCHAR(128) DEFAULT NULL COMMENT 'Python异步任务ID',
+    `resume_count`  INT           NOT NULL DEFAULT 0 COMMENT '简历数量',
+    `create_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP COMMENT '新建时间',
+    `submitted`     TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '是否已提交分析 0否 1是',
+    `update_time`   DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_task_task_id` (`task_id`),
+    KEY `idx_task_python_task_id` (`python_task_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='上传任务表';
+
+-- ----------------------------
+-- 7. 原始简历文本表（存储解析前的原始文本）
+-- ----------------------------
+DROP TABLE IF EXISTS `resume_text`;
+CREATE TABLE `resume_text` (
+    `id`          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `resume_id`   VARCHAR(64)   NOT NULL COMMENT '业务简历ID（如UUID）',
+    `file_name`   VARCHAR(255)  DEFAULT NULL COMMENT '原始文件名',
+    `text`        MEDIUMTEXT    NOT NULL COMMENT '原始简历文本内容',
+    `create_time` DATETIME      DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_resume_text_resume_id` (`resume_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='原始简历文本表';
+
+-- ----------------------------
+-- 8. 任务-简历关联表（仅保留 task 与 resume_text 的关联）
+-- ----------------------------
+DROP TABLE IF EXISTS `task_resume`;
+CREATE TABLE `task_resume` (
+    `id`             BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id`        BIGINT      NOT NULL COMMENT '任务ID',
+    `resume_text_id` BIGINT      NOT NULL COMMENT '简历文本ID',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_task_resume_pair` (`task_id`, `resume_text_id`),
+    KEY `idx_task_resume_task_id` (`task_id`),
+    KEY `idx_task_resume_resume_text_id` (`resume_text_id`),
+    CONSTRAINT `fk_task_resume_task` FOREIGN KEY (`task_id`) REFERENCES `task` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_task_resume_resume_text` FOREIGN KEY (`resume_text_id`) REFERENCES `resume_text` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务与简历文本关联表';
+
+-- ----------------------------
+-- 9. 任务分析结果表（存储 task 经 FastAPI 处理后的分析结果）
+-- ----------------------------
+DROP TABLE IF EXISTS `task_result`;
+CREATE TABLE `task_result` (
+    `id`          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id`     BIGINT        NOT NULL COMMENT '任务ID',
+    `status`      VARCHAR(32)   NOT NULL DEFAULT 'RUNNING' COMMENT '任务状态 RUNNING/SUCCESS/FAILED',
+    `result_json` MEDIUMTEXT    NOT NULL COMMENT 'FastAPI返回的完整结果JSON',
+    `create_time` DATETIME      DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_task_result_task_id` (`task_id`),
+    CONSTRAINT `fk_task_result_task` FOREIGN KEY (`task_id`) REFERENCES `task` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务分析结果表';
