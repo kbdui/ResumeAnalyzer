@@ -42,31 +42,42 @@ public class TaskMatchService {
      * 按业务 taskId 提交 Python 匹配任务，返回 pythonTaskId
      */
     public String submitByTaskId(String taskId, String jdText, Integer topK, Integer recallK) throws IOException {
+        // 获得完整task
         TaskDO task = taskService.getByBusinessTaskId(taskId);
         if (task == null) {
             throw new IllegalArgumentException("task 不存在: " + taskId);
         }
+
+         // 获得和该task关联的resumeID
         List<TaskResumeDO> relations = taskResumeDAO.selectList(new LambdaQueryWrapper<TaskResumeDO>()
                 .eq(TaskResumeDO::getTaskId, task.getId())
                 .orderByAsc(TaskResumeDO::getId));
+
         if (relations == null || relations.isEmpty()) {
             throw new IllegalArgumentException("task 下没有可提交的简历文本: " + taskId);
         }
+
+        // 获得resumeID对应的resumeText
         List<Long> resumeTextIds = relations.stream()
                 .map(TaskResumeDO::getResumeTextId)
                 .collect(Collectors.toList());
         List<ResumeTextDO> rows = resumeTextDAO.selectBatchIds(resumeTextIds);
+
         if (rows == null || rows.isEmpty()) {
             throw new IllegalArgumentException("task 下没有可提交的简历文本: " + taskId);
         }
+
+        // 以下两段对得到的resumeText排序
         Map<Long, ResumeTextDO> rowMap = rows.stream()
                 .filter(item -> item != null && item.getId() != null)
                 .collect(Collectors.toMap(ResumeTextDO::getId, item -> item, (a, b) -> a));
+
         List<ResumeTextDO> orderedRows = relations.stream()
                 .map(relation -> rowMap.get(relation.getResumeTextId()))
                 .filter(item -> item != null)
                 .collect(Collectors.toList());
 
+        // DO转为DTO
         List<ResumeTextDTO> resumes = new ArrayList<>(orderedRows.size());
         for (ResumeTextDO row : orderedRows) {
             if (row == null || row.getText() == null || row.getText().isBlank()) {
@@ -81,6 +92,8 @@ public class TaskMatchService {
         if (resumes.isEmpty()) {
             throw new IllegalArgumentException("task 下没有有效简历文本: " + taskId);
         }
+
+        // 提交任务，更新对应的PythonTaskId，设置任务已提交
         String pythonTaskId = pythonService.submitMatchTask(jdText, resumes, topK, recallK);
         taskService.bindPythonTaskId(task.getId(), pythonTaskId);
         taskService.setSubmitted(task.getId(), 1);

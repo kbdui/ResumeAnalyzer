@@ -1,5 +1,17 @@
 from __future__ import annotations
 
+"""
+FastAPI 简历匹配服务（Python 侧）。
+
+提供两类能力：
+- 同步匹配：TF-IDF 以及 “召回 + 重排” 的 pipeline；
+- 异步匹配：将 pipeline 任务放入内存队列，后台线程执行，支持查询任务状态与结果。
+
+说明：
+- 异步任务状态与结果存放于进程内内存（TASK_STORE），服务重启后会丢失。
+- embedding 重排依赖 sentence-transformers；未安装时会自动回退到 TF-IDF 分数以保证可用性。
+"""
+
 import queue
 import threading
 import time
@@ -29,6 +41,8 @@ TASK_LOCK = threading.Lock()
 
 
 class ResumeDocument(BaseModel):
+    """单份简历的标准化输入结构（pipeline 输入的一部分）。"""
+
     resume_id: Optional[str] = None
     file_name: Optional[str] = None
     text: str = ""
@@ -38,6 +52,8 @@ class ResumeDocument(BaseModel):
 
 
 class MatchPipelineRequest(BaseModel):
+    """匹配 pipeline 的请求体：JD 文本 + 多份简历 + TopK/RecallK 控制参数。"""
+
     jd_text: str
     resumes: List[ResumeDocument]
     top_k: int = 20
@@ -45,15 +61,25 @@ class MatchPipelineRequest(BaseModel):
 
 
 class TfidfRequest(BaseModel):
+    """兼容历史的 TF-IDF 接口请求体（单简历数据 + JD）。"""
+
     resume_data: Dict[str, Any]
     job_description: str
 
 
 def _now() -> float:
+    """返回当前时间戳（秒）。用于记录任务 created/started/ended。"""
     return time.time()
 
 
 def _get_embedder():
+    """
+    延迟加载 embedding 模型（sentence-transformers）。
+
+    返回：
+    - SentenceTransformer 实例（可用时）
+    - None（未安装依赖或初始化失败时；同时记录错误信息用于对外暴露）
+    """
     global _embedder, _embedder_error
     if _embedder is not None:
         return _embedder
@@ -71,6 +97,11 @@ def _get_embedder():
 
 
 def _extract_keywords(text: str, max_terms: int = 40) -> List[str]:
+    """
+    从输入文本中抽取用于“技能覆盖率”计算的关键词集合。
+
+    这里复用 tokenize_mixed 的分词结果，按出现顺序去重并截断到 max_terms。
+    """
     token_str = tokenize_mixed(text)
     tokens = [t for t in token_str.split(" ") if len(t) > 1]
     unique = []
@@ -85,6 +116,11 @@ def _extract_keywords(text: str, max_terms: int = 40) -> List[str]:
 
 
 def _skill_coverage(resume: ResumeDocument, jd_text: str) -> float:
+    """
+    估算简历对 JD 的“关键词覆盖率”。
+
+    做法：从 JD 抽取关键词集合，统计这些关键词在 (skills + raw text) 中出现的比例。
+    """
     jd_terms = _extract_keywords(jd_text)
     if not jd_terms:
         return 0.0
@@ -95,6 +131,11 @@ def _skill_coverage(resume: ResumeDocument, jd_text: str) -> float:
 
 
 def _recall_stage(req: MatchPipelineRequest) -> List[Dict[str, Any]]:
+    """
+    召回阶段：对每份简历计算 tfidf + 覆盖率的粗排分，过滤明显不相关项并取前 recall_k。
+
+    输出为候选列表（dict），会带上召回分及可解释字段（top_terms 等）。
+    """
     candidates: List[Dict[str, Any]] = []
     for idx, resume in enumerate(req.resumes):
         tfidf_score, top_terms = tfidf_cosine(resume.text, req.jd_text)
@@ -124,6 +165,12 @@ def _recall_stage(req: MatchPipelineRequest) -> List[Dict[str, Any]]:
 
 
 def _field_text(parts: List[Any]) -> str:
+    """
+    将结构化字段（工作经历/项目等）拼接为可用于 embedding 的文本。
+
+    - dict：拼接其 values
+    - 其他：直接 str()
+    """
     rows = []
     for item in parts or []:
         if isinstance(item, dict):
@@ -134,6 +181,12 @@ def _field_text(parts: List[Any]) -> str:
 
 
 def _embed_score(resume: Dict[str, Any], jd_text: str) -> float:
+    """
+    重排阶段的 embedding 相似度打分。
+
+    - 可用时：计算 skills/work/projects/raw 与 JD 的向量相似度加权和
+    - 不可用时：回退到召回阶段的 tfidf_score，确保 pipeline 可运行
+    """
     embedder = _get_embedder()
     if embedder is None:
         # fallback: 未安装 embedding 依赖时使用 tfidf 分替代，保证流程可跑
@@ -160,6 +213,11 @@ def _embed_score(resume: Dict[str, Any], jd_text: str) -> float:
 
 
 def _rerank_stage(candidates: List[Dict[str, Any]], jd_text: str, top_k: int) -> Dict[str, Any]:
+    """
+    重排阶段：对召回候选进行 embedding 打分，并与 recall_score 融合得到最终排序。
+
+    返回结构包含模型信息、是否 fallback、错误信息（若有）以及 top_k 条结果。
+    """
     results = []
     for c in candidates:
         emb_score = _embed_score(c, jd_text)
@@ -177,6 +235,11 @@ def _rerank_stage(candidates: List[Dict[str, Any]], jd_text: str, top_k: int) ->
 
 
 def run_pipeline(req: MatchPipelineRequest) -> Dict[str, Any]:
+    """
+    执行完整匹配 pipeline（同步）。
+
+    流程：recall -> rerank，并返回 summary + results。
+    """
     start = _now()
     recall_candidates = _recall_stage(req)
     rerank = _rerank_stage(recall_candidates, req.jd_text, req.top_k)
@@ -192,6 +255,13 @@ def run_pipeline(req: MatchPipelineRequest) -> Dict[str, Any]:
 
 
 def _worker():
+    """
+    后台工作线程：从 TASK_QUEUE 取出任务，执行 pipeline，并更新 TASK_STORE 状态与结果。
+
+    状态流转：
+    - queued -> running -> done
+    - queued/running -> failed（发生异常时）
+    """
     while True:
         task_id = TASK_QUEUE.get()
         with TASK_LOCK:
@@ -224,16 +294,25 @@ _worker_thread.start()
 
 @app.post("/match/tfidf")
 def match_tfidf(req: TfidfRequest):
+    """同步 TF-IDF 匹配接口（历史/兼容用）。"""
     return calculate_tfidf_similarity(req.resume_data, req.job_description)
 
 
 @app.post("/match/pipeline")
 def match_pipeline(req: MatchPipelineRequest):
+    """同步 pipeline 匹配接口：直接返回召回+重排结果。"""
     return run_pipeline(req)
 
 
 @app.post("/tasks/match-pipeline")
 def create_match_task(req: MatchPipelineRequest):
+    """
+    创建异步 pipeline 任务。
+
+    返回：
+    - task_id：用于后续查询
+    - status：初始为 queued
+    """
     task_id = str(uuid.uuid4())
     with TASK_LOCK:
         TASK_STORE[task_id] = {
@@ -248,6 +327,12 @@ def create_match_task(req: MatchPipelineRequest):
 
 @app.get("/tasks/{task_id}")
 def get_task(task_id: str):
+    """
+    查询异步任务状态与结果。
+
+    - not_found：任务不存在（或服务重启后内存丢失）
+    - queued/running/done/failed：返回对应时间戳、错误信息与结果（若已完成）
+    """
     with TASK_LOCK:
         task = TASK_STORE.get(task_id)
         if task is None:

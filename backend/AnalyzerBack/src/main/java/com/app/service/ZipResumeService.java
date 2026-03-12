@@ -1,5 +1,6 @@
 package com.app.service;
 
+import com.app.config.ZipResumeProperties;
 import com.app.dto.ResumeTextDTO;
 import com.app.tool.FileParserUtil;
 import org.springframework.stereotype.Service;
@@ -21,9 +22,11 @@ import java.util.zip.ZipInputStream;
 @Service
 public class ZipResumeService {
 
-    private static final int MAX_FILES = 1500;
-    private static final int MAX_SINGLE_FILE_BYTES = 20 * 1024 * 1024; // 20MB
-    private static final int BUFFER_SIZE = 8192;
+    private final ZipResumeProperties properties;
+
+    public ZipResumeService(ZipResumeProperties properties) {
+        this.properties = properties;
+    }
 
     public List<ResumeTextDTO> parseZipToTexts(MultipartFile zipFile) throws IOException {
         String name = zipFile.getOriginalFilename();
@@ -39,8 +42,8 @@ public class ZipResumeService {
                 if (entry.isDirectory()) {
                     continue;
                 }
-                if (result.size() >= MAX_FILES) {
-                    throw new IllegalArgumentException("压缩包文件数量超限，最多支持 " + MAX_FILES + " 份");
+                if (result.size() >= properties.getMaxFiles()) {
+                    throw new IllegalArgumentException("压缩包文件数量超限，最多支持 " + properties.getMaxFiles() + " 份");
                 }
                 String entryName = entry.getName();
                 if (entryName == null || entryName.contains("..")) {
@@ -50,7 +53,7 @@ public class ZipResumeService {
                     continue;
                 }
 
-                byte[] fileBytes = readEntryBytes(zis, MAX_SINGLE_FILE_BYTES);
+                byte[] fileBytes = readEntryBytes(zis, properties.getMaxSingleFileBytes());
                 String text = FileParserUtil.extractTextFromFileName(entryName, new ByteArrayInputStream(fileBytes));
 
                 ResumeTextDTO dto = new ResumeTextDTO();
@@ -75,9 +78,9 @@ public class ZipResumeService {
                 || lower.endsWith(".html");
     }
 
-    private static byte[] readEntryBytes(InputStream in, int maxBytes) throws IOException {
+    private byte[] readEntryBytes(InputStream in, int maxBytes) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[BUFFER_SIZE];
+        byte[] buf = new byte[properties.getBufferSize()];
         int total = 0;
         int n;
         while ((n = in.read(buf)) != -1) {

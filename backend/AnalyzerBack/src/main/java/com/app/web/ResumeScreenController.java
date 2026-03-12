@@ -1,5 +1,6 @@
 package com.app.web;
 
+import com.app.config.PythonTaskSetProperties;
 import com.app.request.TaskSubmitMatchRequest;
 import com.app.service.TaskMatchService;
 import com.app.tool.ApiResponse;
@@ -15,9 +16,12 @@ import java.io.IOException;
 public class ResumeScreenController {
     private final TaskMatchService taskMatchService;
 
-    @Autowired
-    public ResumeScreenController(TaskMatchService taskMatchService){
+    private final PythonTaskSetProperties properties;
+
+    // 构造器上方可以省略不写@Autowired
+    public ResumeScreenController(TaskMatchService taskMatchService, PythonTaskSetProperties properties){
         this.taskMatchService = taskMatchService;
+        this.properties = properties;
     }
 
     /**
@@ -32,8 +36,8 @@ public class ResumeScreenController {
             return ApiResponse.error(400, "jdText 不能为空");
         }
         try {
-            Integer topK = request.getTopK() == null ? 20 : request.getTopK();
-            Integer recallK = request.getRecallK() == null ? 200 : request.getRecallK();
+            Integer topK = request.getTopK() == null ? properties.getTopK() : request.getTopK();
+            Integer recallK = request.getRecallK() == null ? properties.getRecallK() : request.getRecallK();
             String pythonTaskId = taskMatchService.submitByTaskId(
                     request.getTaskId(),
                     request.getJdText(),

@@ -1,5 +1,6 @@
 package com.app.request;
 
+import com.app.config.PythonTaskSetProperties;
 import lombok.Data;
 
 /**
@@ -9,6 +10,6 @@ import lombok.Data;
 public class TaskSubmitMatchRequest {
     private String taskId;
     private String jdText;
-    private Integer topK = 20;
-    private Integer recallK = 200;
+    private Integer topK;
+    private Integer recallK;
 }
