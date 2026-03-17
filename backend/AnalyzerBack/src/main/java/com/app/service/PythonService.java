@@ -58,7 +58,7 @@ public class PythonService {
     }
 
     /**
-     * 提交异步匹配任务，按字段传参
+     * 按字段传参，调用上方重构函数
      */
     public String submitMatchTask(String jdText,
                                   List<com.app.dto.ResumeTextDTO> resumes,

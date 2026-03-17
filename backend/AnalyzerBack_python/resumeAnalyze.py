@@ -113,6 +113,7 @@ def tfidf_cosine(text_a: str, text_b: str, max_features: int = 2000) -> Tuple[fl
     return sim, top_terms
 
 
+# 次要
 def calculate_tfidf_similarity(resume_data: Dict[str, Any], job_description: str) -> Dict[str, Any]:
     """
     字段加权：skills/work/projects/raw
