@@ -154,3 +154,21 @@ CREATE TABLE `task_result` (
     UNIQUE KEY `uk_task_result_task_id` (`task_id`),
     CONSTRAINT `fk_task_result_task` FOREIGN KEY (`task_id`) REFERENCES `task` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务分析结果表';
+
+-- ----------------------------
+-- 10. 任务与简历主表关联（保留筛选排序分数）
+-- ----------------------------
+DROP TABLE IF EXISTS `task_resume_main`;
+CREATE TABLE `task_resume_main` (
+    `id`         BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id`    BIGINT         NOT NULL COMMENT '任务ID',
+    `resume_id`  BIGINT         NOT NULL COMMENT '简历主表ID',
+    `rank_no`    INT            DEFAULT NULL COMMENT '在筛选结果中的名次（从1开始）',
+    `final_score` DECIMAL(10,6) DEFAULT NULL COMMENT 'Python筛选结果 final_score',
+    `create_time` DATETIME      DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_task_resume_main_task_id` (`task_id`),
+    KEY `idx_task_resume_main_resume_id` (`resume_id`),
+    CONSTRAINT `fk_task_resume_main_task` FOREIGN KEY (`task_id`) REFERENCES `task` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_task_resume_main_resume` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务与简历主表关联表';

@@ -16,11 +16,15 @@ import com.app.entity.resumeDetail.PersonalInfoDO;
 import com.app.entity.resumeDetail.ProjectDO;
 import com.app.entity.resumeDetail.WorkExperienceDO;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -75,9 +79,20 @@ public class ResumeService {
     }
 
     /**
+     * 保存单个简历解析结果并返回主表ID
+     */
+    @Transactional
+    public Long saveResumeAndReturnId(ResumeDTO resumeDTO) {
+        if (resumeDTO == null) {
+            return null;
+        }
+        return saveSingleResume(resumeDTO);
+    }
+
+    /**
      * 保存单个简历及其明细
      */
-    private void saveSingleResume(ResumeDTO dto) {
+    private Long saveSingleResume(ResumeDTO dto) {
         LocalDateTime now = LocalDateTime.now();
 
         // 1. 保存主表 resume
@@ -97,7 +112,7 @@ public class ResumeService {
         Long resumeId = resumeDO.getId();
         if (resumeId == null) {
             // 未获取到自增主键，直接返回避免 NPE
-            return;
+            return null;
         }
 
         // 2. 个人信息
@@ -167,6 +182,7 @@ public class ResumeService {
                 projectDAO.insert(pDO);
             }
         }
+        return resumeId;
     }
 
     /**
@@ -179,6 +195,90 @@ public class ResumeService {
             return;
         }
         resumeDAO.deleteById(resumeId);
+    }
+
+    public ResumeDTO getResumeDetailById(Long resumeId) {
+        if (resumeId == null) {
+            return null;
+        }
+        ResumeDO resumeDO = resumeDAO.selectById(resumeId);
+        if (resumeDO == null) {
+            return null;
+        }
+        return toResumeDTO(resumeDO);
+    }
+
+    private ResumeDTO toResumeDTO(ResumeDO resumeDO) {
+        ResumeDTO dto = new ResumeDTO();
+        dto.setSkills(parseStringList(resumeDO.getSkills()));
+        dto.setCertificates(parseStringList(resumeDO.getCertificates()));
+
+        PersonalInfoDO personalInfoDO = personalInfoDAO.selectOne(new LambdaQueryWrapper<PersonalInfoDO>()
+                .eq(PersonalInfoDO::getResumeId, resumeDO.getId())
+                .last("LIMIT 1"));
+        if (personalInfoDO != null) {
+            PersonalInfoDTO personalInfoDTO = new PersonalInfoDTO();
+            personalInfoDTO.setName(personalInfoDO.getName());
+            personalInfoDTO.setContact(personalInfoDO.getContact());
+            personalInfoDTO.setEmail(personalInfoDO.getEmail());
+            dto.setPersonalInfo(personalInfoDTO);
+        }
+
+        List<EducationDO> educationDOS = educationDAO.selectList(new LambdaQueryWrapper<EducationDO>()
+                .eq(EducationDO::getResumeId, resumeDO.getId())
+                .orderByAsc(EducationDO::getSortOrder)
+                .orderByAsc(EducationDO::getId));
+        List<EducationDTO> educationDTOS = new ArrayList<>();
+        for (EducationDO educationDO : educationDOS) {
+            EducationDTO educationDTO = new EducationDTO();
+            educationDTO.setSchool(educationDO.getSchool());
+            educationDTO.setMajor(educationDO.getMajor());
+            educationDTO.setDegree(educationDO.getDegree());
+            educationDTO.setGraduationYear(educationDO.getGraduationYear());
+            educationDTOS.add(educationDTO);
+        }
+        dto.setEducation(educationDTOS);
+
+        List<WorkExperienceDO> workExperienceDOS = workExperienceDAO.selectList(new LambdaQueryWrapper<WorkExperienceDO>()
+                .eq(WorkExperienceDO::getResumeId, resumeDO.getId())
+                .orderByAsc(WorkExperienceDO::getSortOrder)
+                .orderByAsc(WorkExperienceDO::getId));
+        List<WorkExperienceDTO> workExperienceDTOS = new ArrayList<>();
+        for (WorkExperienceDO workExperienceDO : workExperienceDOS) {
+            WorkExperienceDTO workExperienceDTO = new WorkExperienceDTO();
+            workExperienceDTO.setCompany(workExperienceDO.getCompany());
+            workExperienceDTO.setPosition(workExperienceDO.getPosition());
+            workExperienceDTO.setDuration(workExperienceDO.getDuration());
+            workExperienceDTO.setDescription(workExperienceDO.getDescription());
+            workExperienceDTOS.add(workExperienceDTO);
+        }
+        dto.setWorkExperience(workExperienceDTOS);
+
+        List<ProjectDO> projectDOS = projectDAO.selectList(new LambdaQueryWrapper<ProjectDO>()
+                .eq(ProjectDO::getResumeId, resumeDO.getId())
+                .orderByAsc(ProjectDO::getSortOrder)
+                .orderByAsc(ProjectDO::getId));
+        List<ProjectDTO> projectDTOS = new ArrayList<>();
+        for (ProjectDO projectDO : projectDOS) {
+            ProjectDTO projectDTO = new ProjectDTO();
+            projectDTO.setName(projectDO.getName());
+            projectDTO.setDescription(projectDO.getDescription());
+            projectDTO.setTechnologies(parseStringList(projectDO.getTechnologies()));
+            projectDTOS.add(projectDTO);
+        }
+        dto.setProjects(projectDTOS);
+        return dto;
+    }
+
+    private List<String> parseStringList(String json) {
+        if (json == null || json.isBlank()) {
+            return Collections.emptyList();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+        } catch (JsonProcessingException e) {
+            return Collections.emptyList();
+        }
     }
 
     private String toJson(Object obj) {

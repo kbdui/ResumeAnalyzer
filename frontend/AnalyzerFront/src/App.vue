@@ -1,85 +1,94 @@
-<script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-      </nav>
-    </div>
-  </header>
-
-  <RouterView />
+  <el-container class="app-container">
+    <el-header class="app-header">
+      <div class="brand">
+        <div class="brand-dot" />
+        <div class="brand-text">
+          <div class="title">Resume Analyzer</div>
+          <div class="subtitle">任务驱动的简历筛选与大模型分析平台</div>
+        </div>
+      </div>
+      <el-menu mode="horizontal" :ellipsis="false" router class="nav-menu">
+        <el-menu-item index="/upload">上传入库</el-menu-item>
+        <el-menu-item index="/task">筛选任务</el-menu-item>
+        <el-menu-item index="/analyze">大模型分析</el-menu-item>
+      </el-menu>
+    </el-header>
+    <el-main class="app-main">
+      <div class="page-shell">
+        <RouterView />
+      </div>
+    </el-main>
+  </el-container>
 </template>
 
 <style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
+.app-container {
+  min-height: 100vh;
+  background: radial-gradient(circle at 0% 0%, #eef4ff 0%, #f6f8fb 40%, #f7f9fc 100%);
 }
 
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
+.app-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  height: auto;
+  padding: 16px 28px 14px;
+  border-bottom: 1px solid rgba(120, 140, 180, 0.16);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-nav {
-  width: 100%;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5b8cff 0%, #7b5cff 100%);
+  box-shadow: 0 0 0 6px rgba(91, 140, 255, 0.14);
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #1d2a44;
+}
+
+.subtitle {
   font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
+  color: #6b7691;
+  margin-top: 2px;
 }
 
-nav a.router-link-exact-active {
-  color: var(--color-text);
+.nav-menu {
+  border-bottom: none;
+  background: transparent;
 }
 
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
+.app-main {
+  padding: 26px 26px 30px;
 }
 
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
+.page-shell {
+  max-width: 1340px;
+  margin: 0 auto;
+  padding: 0 6px;
 }
 
-nav a:first-of-type {
-  border: 0;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
+@media (max-width: 900px) {
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

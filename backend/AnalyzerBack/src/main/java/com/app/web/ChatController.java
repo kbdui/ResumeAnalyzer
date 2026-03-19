@@ -1,22 +1,19 @@
 package com.app.web;
 
 import com.app.dto.ResumeDTO;
-import com.app.dto.ResumeTextDTO;
+import com.app.dto.AnalyzeSubmitResponseDTO;
+import com.app.dto.AnalyzeTaskStatusDTO;
 import com.app.request.ChatRequest;
-import com.app.request.PythonMatchTaskRequest;
 import com.app.service.DeepseekChatService;
-import com.app.service.PythonService;
 import com.app.service.ResumeService;
-import com.app.service.ZipResumeService;
+import com.app.service.TaskDeepseekAnalyzeService;
 import com.app.tool.ApiResponse;
-import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Objects;
 
 @RestController
@@ -28,12 +25,15 @@ public class ChatController {
 
     private final DeepseekChatService deepseekChatService;
     private final ResumeService resumeService;
+    private final TaskDeepseekAnalyzeService taskDeepseekAnalyzeService;
 
     @Autowired
     public ChatController(DeepseekChatService deepseekChatService,
-                          ResumeService resumeService){
+                          ResumeService resumeService,
+                          TaskDeepseekAnalyzeService taskDeepseekAnalyzeService){
         this.deepseekChatService = deepseekChatService;
         this.resumeService = resumeService;
+        this.taskDeepseekAnalyzeService = taskDeepseekAnalyzeService;
     }
 
     /**
@@ -70,5 +70,43 @@ public class ChatController {
         } catch (IOException e) {
             return ApiResponse.error(500, "简历分析失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 提交 task 下筛选简历给大模型进行异步批量分析
+     */
+    @PostMapping("/{taskId}/analyze")
+    public ApiResponse<AnalyzeSubmitResponseDTO> submitAnalyzeTask(
+            @PathVariable("taskId") String taskId,
+            @RequestParam(value = "model", defaultValue = "v3") String model) {
+        if (taskId == null || taskId.isBlank()) {
+            return ApiResponse.error(400, "taskId 不能为空");
+        }
+        try {
+            String analyzeTaskId = taskDeepseekAnalyzeService.submitAnalyzeTask(
+                    taskId,
+                    apiKey,
+                    Objects.equals(model, "v3")
+            );
+            AnalyzeSubmitResponseDTO response = new AnalyzeSubmitResponseDTO();
+            response.setAnalyzeTaskId(analyzeTaskId);
+            response.setTaskId(taskId);
+            response.setMessage("提交成功");
+            return ApiResponse.success(response);
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error(400, e.getMessage());
+        }
+    }
+
+    /**
+     * 查询批量分析任务是否完成
+     */
+    @GetMapping("/analyze/{analyzeTaskId}")
+    public ApiResponse<AnalyzeTaskStatusDTO> getAnalyzeTaskStatus(@PathVariable("analyzeTaskId") String analyzeTaskId) {
+        AnalyzeTaskStatusDTO status = taskDeepseekAnalyzeService.getAnalyzeTaskStatus(analyzeTaskId);
+        if (status == null) {
+            return ApiResponse.error(404, "analyzeTask 不存在: " + analyzeTaskId);
+        }
+        return ApiResponse.success(status);
     }
 }
