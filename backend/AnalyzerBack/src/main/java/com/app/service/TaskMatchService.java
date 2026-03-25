@@ -8,7 +8,7 @@ import com.app.entity.TaskDO;
 import com.app.entity.TaskResultDO;
 import com.app.entity.TaskResumeDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;

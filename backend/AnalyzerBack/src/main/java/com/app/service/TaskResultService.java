@@ -3,9 +3,9 @@ package com.app.service;
 import com.app.dao.TaskResultDAO;
 import com.app.entity.TaskResultDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -123,7 +123,7 @@ public class TaskResultService {
     private String toJson(JsonNode node) {
         try {
             return objectMapper.writeValueAsString(node);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return String.valueOf(node);
         }
     }

@@ -5,8 +5,8 @@ package com.app.service;
  * 调用python的fastAPI相关服务
  */
 import com.app.request.PythonMatchTaskRequest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -92,12 +92,12 @@ public class PythonService {
         JsonNode root = objectMapper.valueToTree(payload);
         // Java 使用驼峰，Python API 使用下划线字段名
         if (root.isObject()) {
-            ((com.fasterxml.jackson.databind.node.ObjectNode) root).set("jd_text", root.get("jdText"));
-            ((com.fasterxml.jackson.databind.node.ObjectNode) root).set("top_k", root.get("topK"));
-            ((com.fasterxml.jackson.databind.node.ObjectNode) root).set("recall_k", root.get("recallK"));
-            ((com.fasterxml.jackson.databind.node.ObjectNode) root).remove("jdText");
-            ((com.fasterxml.jackson.databind.node.ObjectNode) root).remove("topK");
-            ((com.fasterxml.jackson.databind.node.ObjectNode) root).remove("recallK");
+            ((tools.jackson.databind.node.ObjectNode) root).set("jd_text", root.get("jdText"));
+            ((tools.jackson.databind.node.ObjectNode) root).set("top_k", root.get("topK"));
+            ((tools.jackson.databind.node.ObjectNode) root).set("recall_k", root.get("recallK"));
+            ((tools.jackson.databind.node.ObjectNode) root).remove("jdText");
+            ((tools.jackson.databind.node.ObjectNode) root).remove("topK");
+            ((tools.jackson.databind.node.ObjectNode) root).remove("recallK");
         }
         return root;
     }

@@ -15,9 +15,9 @@ import com.app.entity.resumeDetail.EducationDO;
 import com.app.entity.resumeDetail.PersonalInfoDO;
 import com.app.entity.resumeDetail.ProjectDO;
 import com.app.entity.resumeDetail.WorkExperienceDO;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -276,7 +276,7 @@ public class ResumeService {
         }
         try {
             return objectMapper.readValue(json, new TypeReference<List<String>>() {});
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return Collections.emptyList();
         }
     }
@@ -284,7 +284,7 @@ public class ResumeService {
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             // JSON 转换失败时退化为 toString，避免整个事务失败
             return String.valueOf(obj);
         }

@@ -9,6 +9,7 @@ import com.app.entity.TaskDO;
 import com.app.entity.TaskResumeDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,7 +19,6 @@ import java.util.UUID;
 
 @Service
 public class TaskService {
-
     private final TaskDAO taskDAO;
     private final TaskResumeDAO taskResumeDAO;
     private final ResumeTextService resumeTextService;

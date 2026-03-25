@@ -4,8 +4,9 @@ import com.app.dto.AnalyzeTaskStatusDTO;
 import com.app.dto.ResumeDTO;
 import com.app.entity.TaskDO;
 import com.app.entity.TaskResultDO;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
@@ -149,7 +150,7 @@ public class TaskDeepseekAnalyzeService {
     private JsonNode parseResultJson(String resultJson) {
         try {
             return objectMapper.readTree(resultJson);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("task_result.result_json 解析失败: " + e.getMessage());
         }
     }

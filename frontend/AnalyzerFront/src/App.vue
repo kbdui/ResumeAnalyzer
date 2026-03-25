@@ -5,17 +5,17 @@
         <div class="brand-dot" />
         <div class="brand-text">
           <div class="title">Resume Analyzer</div>
-          <div class="subtitle">任务驱动的简历筛选与大模型分析平台</div>
+          <div class="subtitle">基于大语言模型的智能简历分析系统</div>
         </div>
       </div>
       <el-menu mode="horizontal" :ellipsis="false" router class="nav-menu">
-        <el-menu-item index="/upload">上传入库</el-menu-item>
-        <el-menu-item index="/task">筛选任务</el-menu-item>
-        <el-menu-item index="/analyze">大模型分析</el-menu-item>
+        <el-menu-item index="/screen">简历筛选</el-menu-item>
+        <el-menu-item index="/analyze">深度分析</el-menu-item>
       </el-menu>
     </el-header>
     <el-main class="app-main">
       <div class="page-shell">
+        <!-- 配合 index.ts 监测路由切换 -->
         <RouterView />
       </div>
     </el-main>

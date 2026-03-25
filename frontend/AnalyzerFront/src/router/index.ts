@@ -1,22 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import UploadPage from '../views/UploadPage.vue'
+import UploadAndScreenPage from '../views/UploadAndScreenPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    // 默认重定向到筛选页面
     {
       path: '/',
-      redirect: '/upload',
+      redirect: '/screen',
     },
     {
-      path: '/upload',
-      name: 'upload',
-      component: UploadPage,
-    },
-    {
-      path: '/task',
-      name: 'task',
-      component: () => import('../views/TaskPage.vue'),
+      path: '/screen',
+      name: 'screen',
+      component: UploadAndScreenPage,
     },
     {
       path: '/analyze',
