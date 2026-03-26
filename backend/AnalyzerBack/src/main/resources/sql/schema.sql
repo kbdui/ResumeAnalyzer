@@ -165,6 +165,7 @@ CREATE TABLE `task_resume_main` (
     `resume_id`  BIGINT         NOT NULL COMMENT '简历主表ID',
     `rank_no`    INT            DEFAULT NULL COMMENT '在筛选结果中的名次（从1开始）',
     `final_score` DECIMAL(10,6) DEFAULT NULL COMMENT 'Python筛选结果 final_score',
+    `analyze_task_id` VARCHAR(64) DEFAULT NULL COMMENT '深度分析任务ID',
     `create_time` DATETIME      DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     KEY `idx_task_resume_main_task_id` (`task_id`),

@@ -39,10 +39,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <el-space direction="vertical" class="task-selector">
+  <el-space direction="vertical" fill class="task-selector">
     <div class="task-header">
       <el-text tag="b" class="panel-title">任务选择</el-text>
-      <el-button size="small" plain :loading="loading" @click="refreshTasks">刷新</el-button>
+      <el-button id="refresh-button" size="small" plain :loading="loading" @click="refreshTasks">刷新</el-button>
     </div>
     <el-select
       class="task-select"
@@ -75,5 +75,9 @@ onMounted(() => {
 
 .task-select {
   width: 100%;
+}
+
+#refresh-button {
+  margin-left: 10px;
 }
 </style>

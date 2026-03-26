@@ -123,7 +123,13 @@ public class TaskDeepseekAnalyzeService {
                     BigDecimal finalScore = scoreNode.isMissingNode() || scoreNode.isNull()
                             ? null
                             : BigDecimal.valueOf(scoreNode.asDouble());
-                    taskResumeMainService.saveRelation(task.getId(), resumeId, rankNo, finalScore);
+                    taskResumeMainService.saveRelation(
+                            task.getId(),
+                            resumeId,
+                            rankNo,
+                            finalScore,
+                            analyzeTaskId
+                    );
                     successCount++;
                 } catch (IOException e) {
                     failedCount++;
@@ -136,7 +142,14 @@ public class TaskDeepseekAnalyzeService {
             status.setSuccessCount(successCount);
             status.setFailedCount(failedCount);
             status.setError(lastError);
-            status.setStatus(successCount > 0 ? STATUS_SUCCESS : STATUS_FAILED);
+//            status.setStatus(successCount > 0 ? STATUS_SUCCESS : STATUS_FAILED);
+            if (successCount == items.size()) {
+                status.setStatus(STATUS_SUCCESS);
+            } else if (successCount == 0) {
+                status.setStatus(STATUS_FAILED);
+            } else {
+                status.setStatus("PARTIAL_SUCCESS");
+            }
         } catch (RuntimeException e) {
             status.setStatus(STATUS_FAILED);
             status.setError(e.getMessage());

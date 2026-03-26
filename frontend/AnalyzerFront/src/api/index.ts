@@ -42,3 +42,11 @@ export function queryAnalyzeTask(analyzeTaskId: string) {
 export function listResumeByTask(taskId: string) {
   return get<TaskResumeMainView[]>(`/resume/task/${taskId}`)
 }
+
+export function listAnalyzeTasksByTask(taskId: string) {
+  return get<string[]>(`/deepseek/analyze-tasks/${taskId}`)
+}
+
+export function listResumeByTaskAndAnalyzeTask(taskId: string, analyzeTaskId: string) {
+  return get<TaskResumeMainView[]>(`/resume/task/${taskId}/analyze/${analyzeTaskId}`)
+}

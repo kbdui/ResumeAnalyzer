@@ -50,6 +50,29 @@ public class ResumeController {
     }
 
     /**
+     * 查询某 task 下、指定 deepseek analyzeTaskId 的深度分析入库结果
+     */
+    @GetMapping("/task/{taskId}/analyze/{analyzeTaskId}")
+    public ApiResponse<List<TaskResumeMainViewDTO>> listByTaskIdAndAnalyzeTaskId(
+            @PathVariable("taskId") String taskId,
+            @PathVariable("analyzeTaskId") String analyzeTaskId
+    ) {
+        List<TaskResumeMainDO> relations = taskResumeMainService.listRelationsByBusinessTaskIdAndAnalyzeTaskId(taskId, analyzeTaskId);
+        List<TaskResumeMainViewDTO> response = new ArrayList<>();
+        for (TaskResumeMainDO relation : relations) {
+            TaskResumeMainViewDTO viewDTO = new TaskResumeMainViewDTO();
+            viewDTO.setRelationId(relation.getId());
+            viewDTO.setResumeId(relation.getResumeId());
+            viewDTO.setRankNo(relation.getRankNo());
+            viewDTO.setFinalScore(relation.getFinalScore());
+            viewDTO.setCreateTime(relation.getCreateTime());
+            viewDTO.setResume(resumeService.getResumeDetailById(relation.getResumeId()));
+            response.add(viewDTO);
+        }
+        return ApiResponse.success(response);
+    }
+
+    /**
      * 查询单个简历主表内容
      */
     @GetMapping("/{resumeId}")

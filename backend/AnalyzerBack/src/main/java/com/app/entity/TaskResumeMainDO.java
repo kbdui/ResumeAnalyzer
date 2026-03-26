@@ -31,6 +31,12 @@ public class TaskResumeMainDO {
     @TableField("final_score")
     private BigDecimal finalScore;
 
+    /**
+     * 深度分析任务ID（来自 deepseek 的异步批量分析 submit 返回的 analyzeTaskId）
+     */
+    @TableField("analyze_task_id")
+    private String analyzeTaskId;
+
     @TableField("create_time")
     private LocalDateTime createTime;
 }

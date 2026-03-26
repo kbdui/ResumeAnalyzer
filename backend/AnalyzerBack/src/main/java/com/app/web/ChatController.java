@@ -7,6 +7,7 @@ import com.app.request.ChatRequest;
 import com.app.service.DeepseekChatService;
 import com.app.service.ResumeService;
 import com.app.service.TaskDeepseekAnalyzeService;
+import com.app.service.TaskResumeMainService;
 import com.app.tool.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,14 +27,17 @@ public class ChatController {
     private final DeepseekChatService deepseekChatService;
     private final ResumeService resumeService;
     private final TaskDeepseekAnalyzeService taskDeepseekAnalyzeService;
+    private final TaskResumeMainService taskResumeMainService;
 
     @Autowired
     public ChatController(DeepseekChatService deepseekChatService,
                           ResumeService resumeService,
-                          TaskDeepseekAnalyzeService taskDeepseekAnalyzeService){
+                          TaskDeepseekAnalyzeService taskDeepseekAnalyzeService,
+                          TaskResumeMainService taskResumeMainService){
         this.deepseekChatService = deepseekChatService;
         this.resumeService = resumeService;
         this.taskDeepseekAnalyzeService = taskDeepseekAnalyzeService;
+        this.taskResumeMainService = taskResumeMainService;
     }
 
     /**
@@ -108,5 +112,13 @@ public class ChatController {
             return ApiResponse.error(404, "analyzeTask 不存在: " + analyzeTaskId);
         }
         return ApiResponse.success(status);
+    }
+
+    /**
+     * 查询某 task 下所有“深度分析任务ID”（distinct analyze_task_id），用于让用户选择要展示的那次分析结果。
+     */
+    @GetMapping("/analyze-tasks/{taskId}")
+    public ApiResponse<java.util.List<String>> listAnalyzeTaskIds(@PathVariable("taskId") String taskId) {
+        return ApiResponse.success(taskResumeMainService.listAnalyzeTaskIdsByBusinessTaskId(taskId));
     }
 }

@@ -1,3 +1,19 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
+/**
+ * 与 el-menu-item 的 index 对齐；根路径重定向到筛选时仍高亮「简历筛选」
+ */
+const activeMenuPath = computed(() => {
+  const p = route.path
+  if (p === '/' || p === '') return '/screen'
+  return p
+})
+</script>
+
 <template>
   <el-container class="app-container">
     <el-header class="app-header">
@@ -8,9 +24,17 @@
           <div class="subtitle">基于大语言模型的智能简历分析系统</div>
         </div>
       </div>
-      <el-menu mode="horizontal" :ellipsis="false" router class="nav-menu">
+      <el-menu
+        :key="activeMenuPath"
+        mode="horizontal"
+        :ellipsis="false"
+        router
+        :default-active="activeMenuPath"
+        class="nav-menu"
+      >
         <el-menu-item index="/screen">简历筛选</el-menu-item>
         <el-menu-item index="/analyze">深度分析</el-menu-item>
+        <el-menu-item index="/history">历史记录</el-menu-item>
       </el-menu>
     </el-header>
     <el-main class="app-main">
