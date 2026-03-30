@@ -24,6 +24,7 @@ public class TaskDeepseekAnalyzeService {
     private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_RUNNING = "RUNNING";
     private static final String STATUS_SUCCESS = "SUCCESS";
+    private static final String STATUS_PARTIAL_SUCCESS = "PARTIAL_SUCCESS";
     private static final String STATUS_FAILED = "FAILED";
 
     private final TaskService taskService;
@@ -101,7 +102,7 @@ public class TaskDeepseekAnalyzeService {
 
         int successCount = 0;
         int failedCount = 0;
-        String lastError = null;
+        StringBuilder errorBuilder = new StringBuilder();
 
         try {
             int rankNo = 0;
@@ -131,24 +132,26 @@ public class TaskDeepseekAnalyzeService {
                             analyzeTaskId
                     );
                     successCount++;
-                } catch (IOException e) {
+                } catch (IOException | RuntimeException e) {
                     failedCount++;
-                    lastError = e.getMessage();
-                } catch (RuntimeException e) {
-                    failedCount++;
-                    lastError = e.getMessage();
+                    if (!errorBuilder.isEmpty()) {
+                        errorBuilder.append(" | ");
+                    }
+                    errorBuilder.append("rankNo=")
+                            .append(rankNo)
+                            .append(", error=")
+                            .append(e.getMessage());
                 }
+                status.setSuccessCount(successCount);
+                status.setFailedCount(failedCount);
+                status.setError(String.valueOf(errorBuilder));
             }
-            status.setSuccessCount(successCount);
-            status.setFailedCount(failedCount);
-            status.setError(lastError);
-//            status.setStatus(successCount > 0 ? STATUS_SUCCESS : STATUS_FAILED);
             if (successCount == items.size()) {
                 status.setStatus(STATUS_SUCCESS);
             } else if (successCount == 0) {
                 status.setStatus(STATUS_FAILED);
             } else {
-                status.setStatus("PARTIAL_SUCCESS");
+                status.setStatus(STATUS_PARTIAL_SUCCESS);
             }
         } catch (RuntimeException e) {
             status.setStatus(STATUS_FAILED);

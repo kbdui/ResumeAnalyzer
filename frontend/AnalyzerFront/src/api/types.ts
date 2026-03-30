@@ -58,7 +58,7 @@ export interface AnalyzeSubmitResponse {
 export interface AnalyzeTaskStatus {
   analyzeTaskId: string
   taskId: string
-  status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED'
+  status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED'
   total: number
   successCount: number
   failedCount: number

@@ -8,6 +8,7 @@ const props = defineProps<{
 const type = computed(() => {
   const s = (props.status || '').toUpperCase()
   if (s === 'DONE' || s === 'SUCCESS') return 'success'
+  if (s === 'PARTIAL_SUCCESS') return 'warning'
   if (s === 'FAILED') return 'danger'
   if (s === 'RUNNING') return 'warning'
   return 'info'

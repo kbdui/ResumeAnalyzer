@@ -5,7 +5,7 @@ import { Loading, MagicStick, Document, User, School, OfficeBuilding, Medal, Arr
 import TaskSelector from '@/components/TaskSelector.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import JsonViewer from '@/components/JsonViewer.vue'
-import { listResumeByTask, queryAnalyzeTask, submitAnalyzeTask } from '@/api'
+import { listResumeByTaskAndAnalyzeTask, queryAnalyzeTask, submitAnalyzeTask } from '@/api'
 import type { AnalyzeTaskStatus, TaskResumeMainView } from '@/api/types'
 
 const taskId = ref('')
@@ -32,8 +32,8 @@ function stopPolling() {
 }
 
 async function loadAnalyzeResult() {
-  if (!taskId.value) return
-  resumeRows.value = await listResumeByTask(taskId.value)
+  if (!taskId.value || !analyzeTaskId.value) return
+  resumeRows.value = await listResumeByTaskAndAnalyzeTask(taskId.value, analyzeTaskId.value)
   expandedRows.value = resumeRows.value.slice(0, 3).map(r => r.resumeId)
 }
 
@@ -41,11 +41,17 @@ async function pollAnalyze() {
   if (!analyzeTaskId.value) return
   try {
     status.value = await queryAnalyzeTask(analyzeTaskId.value)
-    if (status.value.status === 'SUCCESS' || status.value.status === 'FAILED') {
+    if (
+      status.value.status === 'SUCCESS' ||
+      status.value.status === 'PARTIAL_SUCCESS' ||
+      status.value.status === 'FAILED'
+    ) {
       stopPolling()
       await loadAnalyzeResult()
       if (status.value.status === 'SUCCESS') {
         ElMessage.success('大模型分析任务已完成')
+      } else if (status.value.status === 'PARTIAL_SUCCESS') {
+        ElMessage.warning('大模型分析任务部分完成，已展示可用结果')
       } else {
         ElMessage.error(status.value.error || '大模型分析任务失败')
       }
