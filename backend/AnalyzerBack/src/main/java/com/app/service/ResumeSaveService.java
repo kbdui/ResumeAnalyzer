@@ -1,7 +1,7 @@
 package com.app.service;
 
 import com.app.config.ZipResumeProperties;
-import com.app.dto.ResumeTextDTO;
+import com.app.dto.TextDTO;
 import com.app.tool.FileParserUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,21 +20,21 @@ import java.util.zip.ZipInputStream;
  * 处理 zip 简历上传：将 zip 内多份文件解析为文本数组
  */
 @Service
-public class ZipResumeService {
+public class ResumeSaveService {
 
     private final ZipResumeProperties properties;
 
-    public ZipResumeService(ZipResumeProperties properties) {
+    public ResumeSaveService(ZipResumeProperties properties) {
         this.properties = properties;
     }
 
-    public List<ResumeTextDTO> parseZipToTexts(MultipartFile zipFile) throws IOException {
+    public List<TextDTO> parseZipToTexts(MultipartFile zipFile) throws IOException {
         String name = zipFile.getOriginalFilename();
         if (name == null || !name.toLowerCase().endsWith(".zip")) {
             throw new IllegalArgumentException("请上传 zip 压缩包");
         }
 
-        List<ResumeTextDTO> result = new ArrayList<>();
+        List<TextDTO> result = new ArrayList<>();
         try (InputStream in = zipFile.getInputStream();
              ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
@@ -56,7 +56,7 @@ public class ZipResumeService {
                 byte[] fileBytes = readEntryBytes(zis, properties.getMaxSingleFileBytes());
                 String text = FileParserUtil.extractTextFromFileName(entryName, new ByteArrayInputStream(fileBytes));
 
-                ResumeTextDTO dto = new ResumeTextDTO();
+                TextDTO dto = new TextDTO();
                 dto.setResumeId(UUID.randomUUID().toString());
                 dto.setFileName(entryName);
                 dto.setText(text);

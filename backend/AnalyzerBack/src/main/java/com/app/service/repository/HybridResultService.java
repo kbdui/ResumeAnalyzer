@@ -1,7 +1,7 @@
-package com.app.service;
+package com.app.service.repository;
 
-import com.app.dao.TaskResultDAO;
-import com.app.entity.TaskResultDO;
+import com.app.dao.HybridResultDAO;
+import com.app.entity.HybridResultDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -14,85 +14,74 @@ import java.util.Collections;
 import java.util.List;
 
 @Service
-public class TaskResultService {
+public class HybridResultService {
 
     private static final String STATUS_RUNNING = "RUNNING";
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_FAILED = "FAILED";
 
-    private final TaskResultDAO taskResultDAO;
+    private final HybridResultDAO hybridResultDAO;
     private final ObjectMapper objectMapper;
 
-    public TaskResultService(TaskResultDAO taskResultDAO, ObjectMapper objectMapper) {
-        this.taskResultDAO = taskResultDAO;
+    public HybridResultService(HybridResultDAO hybridResultDAO, ObjectMapper objectMapper) {
+        this.hybridResultDAO = hybridResultDAO;
         this.objectMapper = objectMapper;
     }
 
-    public TaskResultDO getByTaskId(Long taskDbId) {
+    public HybridResultDO getByTaskId(Long taskDbId) {
         if (taskDbId == null) {
             return null;
         }
-        return taskResultDAO.selectOne(new LambdaQueryWrapper<TaskResultDO>()
-                .eq(TaskResultDO::getTaskId, taskDbId)
+        return hybridResultDAO.selectOne(new LambdaQueryWrapper<HybridResultDO>()
+                .eq(HybridResultDO::getTaskId, taskDbId)
                 .last("LIMIT 1"));
     }
 
-    public TaskResultDO getById(Long id) {
+    public HybridResultDO getById(Long id) {
         if (id == null) {
             return null;
         }
-        return taskResultDAO.selectById(id);
+        return hybridResultDAO.selectById(id);
     }
 
-    public List<TaskResultDO> listByTaskId(Long taskDbId) {
+    public List<HybridResultDO> listByTaskId(Long taskDbId) {
         if (taskDbId == null) {
             return Collections.emptyList();
         }
-        return taskResultDAO.selectList(new LambdaQueryWrapper<TaskResultDO>()
-                .eq(TaskResultDO::getTaskId, taskDbId)
-                .orderByDesc(TaskResultDO::getUpdateTime)
-                .orderByDesc(TaskResultDO::getId));
+        return hybridResultDAO.selectList(new LambdaQueryWrapper<HybridResultDO>()
+                .eq(HybridResultDO::getTaskId, taskDbId)
+                .orderByDesc(HybridResultDO::getUpdateTime)
+                .orderByDesc(HybridResultDO::getId));
     }
 
     /**
-     * 查询后写入 task_result：
-     * - 若不存在则创建
-     * - 若已成功/失败则不再重复写入
-     * - 若进行中则更新为最新状态
+     * 查询后写入 hybrid_result：不存在则创建；存在则始终覆盖为最新状态与结果。
      */
     @Transactional
-    public TaskResultDO upsertFromPythonResult(Long taskDbId, JsonNode pythonResult) {
+    public HybridResultDO upsertFromPythonResult(Long taskDbId, JsonNode pythonResult) {
         String status = resolveStatus(pythonResult);
         String resultJson = toJson(pythonResult);
         LocalDateTime now = LocalDateTime.now();
 
-        TaskResultDO existing = getByTaskId(taskDbId);
+        HybridResultDO existing = getByTaskId(taskDbId);
         if (existing == null) {
-            TaskResultDO created = new TaskResultDO();
+            HybridResultDO created = new HybridResultDO();
             created.setTaskId(taskDbId);
             created.setStatus(status);
             created.setResultJson(resultJson);
             created.setCreateTime(now);
             created.setUpdateTime(now);
-            taskResultDAO.insert(created);
+            hybridResultDAO.insert(created);
             return created;
         }
 
-        if (isTerminal(existing.getStatus())) {
-            return existing;
-        }
-
-        TaskResultDO update = new TaskResultDO();
+        HybridResultDO update = new HybridResultDO();
         update.setId(existing.getId());
         update.setStatus(status);
         update.setResultJson(resultJson);
         update.setUpdateTime(now);
-        taskResultDAO.updateById(update);
-        return taskResultDAO.selectById(existing.getId());
-    }
-
-    private boolean isTerminal(String status) {
-        return STATUS_SUCCESS.equalsIgnoreCase(status) || STATUS_FAILED.equalsIgnoreCase(status);
+        hybridResultDAO.updateById(update);
+        return hybridResultDAO.selectById(existing.getId());
     }
 
     private String resolveStatus(JsonNode root) {

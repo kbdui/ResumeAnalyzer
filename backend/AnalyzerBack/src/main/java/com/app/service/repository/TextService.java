@@ -1,8 +1,8 @@
-package com.app.service;
+package com.app.service.repository;
 
-import com.app.dao.ResumeTextDAO;
-import com.app.dto.ResumeTextDTO;
-import com.app.entity.ResumeTextDO;
+import com.app.dao.TextDAO;
+import com.app.dto.TextDTO;
+import com.app.entity.TextDO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,45 +11,45 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
-public class ResumeTextService {
+public class TextService {
 
-    private final ResumeTextDAO resumeTextDAO;
+    private final TextDAO textDAO;
 
-    public ResumeTextService(ResumeTextDAO resumeTextDAO) {
-        this.resumeTextDAO = resumeTextDAO;
+    public TextService(TextDAO textDAO) {
+        this.textDAO = textDAO;
     }
 
     /**
      * 批量保存原始简历文本
      */
     @Transactional
-    public int saveAll(List<ResumeTextDTO> dtos) {
-        return saveAllAndReturn(dtos).size();
+    public int saveAll(Long taskId, List<TextDTO> dtos) {
+        return saveAllAndReturn(taskId, dtos).size();
     }
 
     /**
      * 批量保存原始简历文本并返回已入库记录
      */
     @Transactional
-    public List<ResumeTextDO> saveAllAndReturn(List<ResumeTextDTO> dtos) {
-        if (dtos == null || dtos.isEmpty()) {
+    public List<TextDO> saveAllAndReturn(Long taskId, List<TextDTO> dtos) {
+        if (taskId == null || dtos == null || dtos.isEmpty()) {
             return new ArrayList<>();
         }
-        List<ResumeTextDO> savedList = new ArrayList<>();
+        List<TextDO> savedList = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
-        for (ResumeTextDTO dto : dtos) {
+        for (TextDTO dto : dtos) {
             if (dto == null || dto.getText() == null || dto.getText().isBlank()) {
                 continue;
             }
-            ResumeTextDO entity = new ResumeTextDO();
+            TextDO entity = new TextDO();
+            entity.setTaskId(taskId);
             entity.setResumeId(dto.getResumeId());
             entity.setFileName(dto.getFileName());
             entity.setText(dto.getText());
             entity.setCreateTime(now);
-            resumeTextDAO.insert(entity);
+            textDAO.insert(entity);
             savedList.add(entity);
         }
         return savedList;
     }
 }
-

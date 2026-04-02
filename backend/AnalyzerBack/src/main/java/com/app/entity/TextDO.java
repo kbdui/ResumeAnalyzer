@@ -12,14 +12,20 @@ import java.time.LocalDateTime;
  * 原始简历文本实体
  */
 @Data
-@TableName("resume_text")
-public class ResumeTextDO {
+@TableName("text")
+public class TextDO {
 
     /**
      * 主键ID
      */
     @TableId(type = IdType.AUTO)
     private Long id;
+
+    /**
+     * 关联任务ID（task.id）
+     */
+    @TableField("task_id")
+    private Long taskId;
 
     /**
      * 业务侧的简历ID（可为 UUID 或关联 resume 表ID）
@@ -45,4 +51,3 @@ public class ResumeTextDO {
     @TableField("create_time")
     private LocalDateTime createTime;
 }
-

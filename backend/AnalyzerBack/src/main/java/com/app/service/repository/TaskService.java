@@ -1,15 +1,12 @@
-package com.app.service;
+package com.app.service.repository;
 
-import com.app.dao.TaskResumeDAO;
 import com.app.dao.TaskDAO;
-import com.app.dto.ResumeTextDTO;
+import com.app.dto.TextDTO;
 import com.app.dto.TaskUploadResponseDTO;
-import com.app.entity.ResumeTextDO;
+import com.app.entity.TextDO;
 import com.app.entity.TaskDO;
-import com.app.entity.TaskResumeDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,22 +17,19 @@ import java.util.UUID;
 @Service
 public class TaskService {
     private final TaskDAO taskDAO;
-    private final TaskResumeDAO taskResumeDAO;
-    private final ResumeTextService resumeTextService;
+    private final TextService textService;
 
     public TaskService(TaskDAO taskDAO,
-                       TaskResumeDAO taskResumeDAO,
-                       ResumeTextService resumeTextService) {
+                       TextService textService) {
         this.taskDAO = taskDAO;
-        this.taskResumeDAO = taskResumeDAO;
-        this.resumeTextService = resumeTextService;
+        this.textService = textService;
     }
 
     /**
      * 创建任务并保存其关联简历文本
      */
     @Transactional
-    public TaskUploadResponseDTO createTaskAndSaveResumes(List<ResumeTextDTO> resumeTexts) {
+    public TaskUploadResponseDTO createTaskAndSaveResumes(List<TextDTO> resumeTexts) {
         LocalDateTime now = LocalDateTime.now();
         TaskDO task = new TaskDO();
         task.setTaskId(UUID.randomUUID().toString());
@@ -45,13 +39,7 @@ public class TaskService {
         task.setUpdateTime(now);
         taskDAO.insert(task);
 
-        List<ResumeTextDO> savedResumes = resumeTextService.saveAllAndReturn(resumeTexts);
-        for (ResumeTextDO savedResume : savedResumes) {
-            TaskResumeDO relation = new TaskResumeDO();
-            relation.setTaskId(task.getId());
-            relation.setResumeTextId(savedResume.getId());
-            taskResumeDAO.insert(relation);
-        }
+        List<TextDO> savedResumes = textService.saveAllAndReturn(task.getId(), resumeTexts);
 
         int savedCount = savedResumes.size();
 

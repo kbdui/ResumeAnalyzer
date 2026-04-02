@@ -25,6 +25,12 @@ public class ResumeDO {
      */
     @TableId(type = IdType.AUTO)
     private Long id;
+
+    /**
+     * 业务简历 ID（与 text.resume_id、task_resume.resume_id 对应）
+     */
+    @TableField("resume_id")
+    private String resumeId;
     
     /**
      * 简历名称/标题

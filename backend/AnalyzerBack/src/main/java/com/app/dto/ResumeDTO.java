@@ -17,6 +17,12 @@ import java.util.List;
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ResumeDTO {
+
+    /**
+     * 业务简历 ID（入库时写入 resume 表；大模型响应通常不含此字段）
+     */
+    @JsonProperty("resume_id")
+    private String resumeId;
     
     @JsonProperty("personal_info")
     private PersonalInfoDTO personalInfo;

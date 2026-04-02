@@ -18,14 +18,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
-import static java.awt.SystemColor.text;
-
 public class FileParserUtil {
+
     public static final String RESUME_PROMPT = """
             请分析以下简历内容，提取关键信息并以JSON格式返回：
-            
-            简历内容：
-            %s
             
             请提取以下信息（如果没有相关信息，请设置为null）：
             1. 个人信息：姓名、联系方式、邮箱等
@@ -68,7 +64,45 @@ public class FileParserUtil {
                 ],
                 "certificates": ["证书1", "证书2"]
             }
-            """.formatted(text);
+            """;
+
+    /**
+     * JD 硬过滤：三态判断说明与输出 schema（占位符依次为：JD 全文、候选人简历 JSON 字符串）
+     */
+    private static final String JD_HARD_FILTER_PROMPT_TEMPLATE = """
+            你是招聘筛选助手。根据「岗位描述 JD」与「候选人简历数据」，对以下四个维度分别做三态判断：
+            - PASS：依据简历可明确判断满足 JD 中该维度的硬性要求；
+            - FAIL：依据简历可明确判断不满足、或与 JD 硬性要求矛盾；
+            - UNKNOWN：简历信息不足、模糊或无法从给定内容中推断，不能明确判定 PASS 或 FAIL。
+
+            四个维度在输出 JSON 中必须使用且仅使用以下四个键（英文，不可改名、不可增删键）：
+            1) education —— 教育背景
+            2) work_experience —— 工作经验
+            3) skills —— 技能
+            4) projects —— 项目经验
+
+            每个维度的值必须是一个 JSON 对象，且必须包含以下字段（不可省略键名）：
+            - dimension：字符串，对应维度的中文名称（如「教育背景」「工作经验」「技能」「项目经验」）；
+            - status：字符串，仅允许三选一且必须大写：PASS、FAIL、UNKNOWN；
+            - confidence：0 到 1 之间的小数，表示你对该判断的置信度；
+            - reason：字符串，简要说明判断理由（中文）；
+            - evidence：字符串数组，列出简历或 JD 中支撑判断的原文要点或短句（若无则可为空数组）。
+
+            只输出一个 JSON 对象，不要输出任何其它说明文字、不要 Markdown 代码块。
+
+            【岗位描述 JD】
+            %s
+
+            【候选人简历 JSON】
+            %s
+            """;
+
+    /**
+     * 构建 JD 硬过滤完整 prompt（JD 与简历 JSON 由调用方传入）
+     */
+    public static String buildJdHardFilterPrompt(String jdText, String resumeJson) {
+        return JD_HARD_FILTER_PROMPT_TEMPLATE.formatted(jdText, resumeJson);
+    }
 
     public static String extractTextFromFile(MultipartFile file) throws IOException {
         String fileName = file.getOriginalFilename();

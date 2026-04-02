@@ -4,7 +4,7 @@ package com.app.service;
 /**
  * 调用python的fastAPI相关服务
  */
-import com.app.request.PythonMatchTaskRequest;
+import com.app.request.ResumeHybridRequest;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import okhttp3.MediaType;
@@ -38,7 +38,7 @@ public class PythonService {
     /**
      * 提交异步匹配任务，返回 taskId
      */
-    public String submitMatchTask(PythonMatchTaskRequest payload) throws IOException {
+    public String submitHybridTask(ResumeHybridRequest payload) throws IOException {
         String body = objectMapper.writeValueAsString(convertPayload(payload));
         Request request = new Request.Builder()
                 .url(baseUrl + "/tasks/match-pipeline")
@@ -60,16 +60,16 @@ public class PythonService {
     /**
      * 按字段传参，调用上方重构函数
      */
-    public String submitMatchTask(String jdText,
-                                  List<com.app.dto.ResumeTextDTO> resumes,
-                                  Integer topK,
-                                  Integer recallK) throws IOException {
-        PythonMatchTaskRequest request = new PythonMatchTaskRequest();
+    public String submitHybridTask(String jdText,
+                                   List<com.app.dto.TextDTO> resumes,
+                                   Integer topK,
+                                   Integer recallK) throws IOException {
+        ResumeHybridRequest request = new ResumeHybridRequest();
         request.setJdText(jdText);
         request.setResumes(resumes);
         request.setTopK(topK == null ? 20 : topK);
         request.setRecallK(recallK == null ? 200 : recallK);
-        return submitMatchTask(request);
+        return submitHybridTask(request);
     }
 
     /**
@@ -88,13 +88,15 @@ public class PythonService {
         }
     }
 
-    private JsonNode convertPayload(PythonMatchTaskRequest payload) {
+    private JsonNode convertPayload(ResumeHybridRequest payload) {
         JsonNode root = objectMapper.valueToTree(payload);
         // Java 使用驼峰，Python API 使用下划线字段名
         if (root.isObject()) {
             ((tools.jackson.databind.node.ObjectNode) root).set("jd_text", root.get("jdText"));
             ((tools.jackson.databind.node.ObjectNode) root).set("top_k", root.get("topK"));
             ((tools.jackson.databind.node.ObjectNode) root).set("recall_k", root.get("recallK"));
+            // taskId 仅用于 controller 层，不属于 Python payload
+            ((tools.jackson.databind.node.ObjectNode) root).remove("taskId");
             ((tools.jackson.databind.node.ObjectNode) root).remove("jdText");
             ((tools.jackson.databind.node.ObjectNode) root).remove("topK");
             ((tools.jackson.databind.node.ObjectNode) root).remove("recallK");

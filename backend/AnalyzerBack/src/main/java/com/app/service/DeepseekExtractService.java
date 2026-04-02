@@ -1,17 +1,22 @@
 package com.app.service;
 
+import com.app.dao.TextDAO;
 import com.app.dto.AnalyzeTaskStatusDTO;
 import com.app.dto.ResumeDTO;
 import com.app.entity.TaskDO;
-import com.app.entity.TaskResultDO;
-import tools.jackson.core.JacksonException;
+import com.app.entity.TextDO;
+import com.app.service.repository.ResumeService;
+import com.app.service.repository.TaskService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
-import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -19,7 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
-public class TaskDeepseekAnalyzeService {
+public class DeepseekExtractService {
 
     private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_RUNNING = "RUNNING";
@@ -28,46 +33,55 @@ public class TaskDeepseekAnalyzeService {
     private static final String STATUS_FAILED = "FAILED";
 
     private final TaskService taskService;
-    private final TaskResultService taskResultService;
-    private final DeepseekChatService deepseekChatService;
+    private final DeepseekBaseService deepseekBaseService;
     private final ResumeService resumeService;
-    private final TaskResumeMainService taskResumeMainService;
+    private final TextDAO textDAO;
     private final ObjectMapper objectMapper;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private final ConcurrentMap<String, AnalyzeTaskStatusDTO> statusStore = new ConcurrentHashMap<>();
 
-    public TaskDeepseekAnalyzeService(TaskService taskService,
-                                      TaskResultService taskResultService,
-                                      DeepseekChatService deepseekChatService,
-                                      ResumeService resumeService,
-                                      TaskResumeMainService taskResumeMainService,
-                                      ObjectMapper objectMapper) {
+    public DeepseekExtractService(TaskService taskService,
+                                  DeepseekBaseService deepseekBaseService,
+                                  ResumeService resumeService,
+                                  TextDAO textDAO,
+                                  ObjectMapper objectMapper) {
         this.taskService = taskService;
-        this.taskResultService = taskResultService;
-        this.deepseekChatService = deepseekChatService;
+        this.deepseekBaseService = deepseekBaseService;
         this.resumeService = resumeService;
-        this.taskResumeMainService = taskResumeMainService;
+        this.textDAO = textDAO;
         this.objectMapper = objectMapper;
     }
 
-    public String submitAnalyzeTask(String taskId, String apiKey, boolean useSiliconFlow) {
+    /**
+     * 提交 extract 任务
+     */
+    public String submitExtractTask(String taskId, String apiKey, boolean useSiliconFlow) {
         TaskDO task = taskService.getByBusinessTaskId(taskId);
         if (task == null) {
             throw new IllegalArgumentException("task 不存在: " + taskId);
         }
-        TaskResultDO taskResult = taskResultService.getByTaskId(task.getId());
-        if (taskResult == null) {
-            throw new IllegalArgumentException("task 还未产生筛选结果: " + taskId);
-        }
-        if (!STATUS_SUCCESS.equalsIgnoreCase(taskResult.getStatus())) {
-            throw new IllegalArgumentException("task_result.status 未完成，当前状态: " + taskResult.getStatus());
+        List<TextDO> rows = textDAO.selectList(new LambdaQueryWrapper<TextDO>()
+                .eq(TextDO::getTaskId, task.getId())
+                .orderByAsc(TextDO::getId));
+        if (rows == null || rows.isEmpty()) {
+            throw new IllegalArgumentException("task 下没有可分析的文本: " + taskId);
         }
 
-        JsonNode root = parseResultJson(taskResult.getResultJson());
-        JsonNode items = root.path("result").path("results").path("items");
-        if (items == null || !items.isArray() || items.isEmpty()) {
-            throw new IllegalArgumentException("task_result 中未找到可分析的 items");
+        ArrayNode items = objectMapper.createArrayNode();
+        for (TextDO row : rows) {
+            if (row == null || row.getText() == null || row.getText().isBlank()) {
+                continue;
+            }
+            ObjectNode o = objectMapper.createObjectNode();
+            o.put("text", row.getText());
+            if (row.getResumeId() != null && !row.getResumeId().isBlank()) {
+                o.put("business_resume_id", row.getResumeId());
+            }
+            items.add(o);
+        }
+        if (items.isEmpty()) {
+            throw new IllegalArgumentException("task 下没有有效文本内容: " + taskId);
         }
 
         String analyzeTaskId = UUID.randomUUID().toString();
@@ -80,15 +94,15 @@ public class TaskDeepseekAnalyzeService {
         status.setFailedCount(0);
         statusStore.put(analyzeTaskId, status);
 
-        executor.submit(() -> runAnalyzeJob(analyzeTaskId, task, items, apiKey, useSiliconFlow));
+        executor.submit(() -> runExtractJob(analyzeTaskId, task, items, apiKey, useSiliconFlow));
         return analyzeTaskId;
     }
 
-    public AnalyzeTaskStatusDTO getAnalyzeTaskStatus(String analyzeTaskId) {
+    public AnalyzeTaskStatusDTO getExtractTaskStatus(String analyzeTaskId) {
         return statusStore.get(analyzeTaskId);
     }
 
-    private void runAnalyzeJob(String analyzeTaskId,
+    private void runExtractJob(String analyzeTaskId,
                                TaskDO task,
                                JsonNode items,
                                String apiKey,
@@ -114,23 +128,16 @@ public class TaskDeepseekAnalyzeService {
                     continue;
                 }
                 try {
-                    ResumeDTO resumeDTO = deepseekChatService.generateResumeDetailFromText(apiKey, text, useSiliconFlow);
-                    Long resumeId = resumeService.saveResumeAndReturnId(resumeDTO);
+                    ResumeDTO resumeDTO = deepseekBaseService.generateResumeDetailFromText(apiKey, text, useSiliconFlow);
+                    String businessResumeId = item.path("business_resume_id").asText("");
+                    if (businessResumeId.isBlank()) {
+                        businessResumeId = null;
+                    }
+                    Long resumeId = resumeService.saveResumeAndReturnId(resumeDTO, businessResumeId);
                     if (resumeId == null) {
                         failedCount++;
                         continue;
                     }
-                    JsonNode scoreNode = item.path("final_score");
-                    BigDecimal finalScore = scoreNode.isMissingNode() || scoreNode.isNull()
-                            ? null
-                            : BigDecimal.valueOf(scoreNode.asDouble());
-                    taskResumeMainService.saveRelation(
-                            task.getId(),
-                            resumeId,
-                            rankNo,
-                            finalScore,
-                            analyzeTaskId
-                    );
                     successCount++;
                 } catch (IOException | RuntimeException e) {
                     failedCount++;
@@ -160,14 +167,6 @@ public class TaskDeepseekAnalyzeService {
             status.setFailedCount(failedCount);
         } finally {
             status.setEndedAtMs(System.currentTimeMillis());
-        }
-    }
-
-    private JsonNode parseResultJson(String resultJson) {
-        try {
-            return objectMapper.readTree(resultJson);
-        } catch (JacksonException e) {
-            throw new IllegalArgumentException("task_result.result_json 解析失败: " + e.getMessage());
         }
     }
 

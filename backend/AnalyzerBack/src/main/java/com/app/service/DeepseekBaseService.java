@@ -3,7 +3,6 @@ package com.app.service;
 import com.app.client.DeepseekClient;
 import com.app.dto.ResumeDTO;
 import com.app.tool.FileParserUtil;
-import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,14 +10,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.List;
 
 
 /**
  * 调用deepseek接口的相关服务
  */
 @Service
-public class DeepseekChatService {
+public class DeepseekBaseService {
     
     private final DeepseekClient deepseekClient;
     
@@ -27,7 +25,7 @@ public class DeepseekChatService {
     
     // 使用构造函数注入
     @Autowired
-    public DeepseekChatService(DeepseekClient deepseekClient, ObjectMapper objectMapper) {
+    public DeepseekBaseService(DeepseekClient deepseekClient, ObjectMapper objectMapper) {
         this.deepseekClient = deepseekClient;
         this.objectMapper = objectMapper;
     }
@@ -82,6 +80,54 @@ public class DeepseekChatService {
         String jsonResponse = deepseekClient.getResponse(apiKey, message);
         JsonNode root = objectMapper.readTree(jsonResponse);
         return root.path("choices").get(0).path("message").path("content").asText();
+    }
+
+    /**
+     * 根据 JD 与简历结构化 JSON，对四个维度做 PASS/FAIL/UNKNOWN 三态判断；返回解析后的 JSON 根节点。
+     */
+    public JsonNode jdHardFilterAnalyze(
+            String apiKey,
+            String jdText,
+            JsonNode resumePayload,
+            boolean useSiliconFlow) throws IOException {
+        String resumeJson;
+        try {
+            resumeJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resumePayload);
+        } catch (Exception e) {
+            resumeJson = String.valueOf(resumePayload);
+        }
+        String prompt = FileParserUtil.buildJdHardFilterPrompt(jdText, resumeJson);
+        String jsonResponse = deepseekClient.getResponse(apiKey, prompt, useSiliconFlow);
+        String content = extractAssistantContent(jsonResponse);
+        String json = stripMarkdownJsonBlock(content);
+        return objectMapper.readTree(json);
+    }
+
+    private static String stripMarkdownJsonBlock(String content) {
+        if (content == null) {
+            return "{}";
+        }
+        String s = content.trim();
+        if (s.startsWith("```")) {
+            int firstNl = s.indexOf('\n');
+            if (firstNl > 0) {
+                s = s.substring(firstNl + 1);
+            }
+            int end = s.lastIndexOf("```");
+            if (end >= 0) {
+                s = s.substring(0, end);
+            }
+        }
+        return s.trim();
+    }
+
+    private String extractAssistantContent(String jsonResponse) throws IOException {
+        JsonNode rootNode = objectMapper.readTree(jsonResponse);
+        JsonNode choices = rootNode.path("choices");
+        if (!choices.isArray() || choices.isEmpty()) {
+            throw new IOException("API 响应缺少 choices");
+        }
+        return choices.get(0).path("message").path("content").asText();
     }
 
     // 解析API返回的数据

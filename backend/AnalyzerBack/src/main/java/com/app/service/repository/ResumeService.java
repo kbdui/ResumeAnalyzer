@@ -1,4 +1,4 @@
-package com.app.service;
+package com.app.service.repository;
 
 import com.app.dao.ResumeDAO;
 import com.app.dao.resumeDetail.EducationDAO;
@@ -63,7 +63,7 @@ public class ResumeService {
             return;
         }
         for (ResumeDTO resumeDTO : resumes) {
-            saveSingleResume(resumeDTO);
+            saveSingleResume(resumeDTO, null);
         }
     }
 
@@ -75,7 +75,7 @@ public class ResumeService {
         if (resumeDTO == null) {
             return;
         }
-        saveSingleResume(resumeDTO);
+        saveSingleResume(resumeDTO, null);
     }
 
     /**
@@ -86,19 +86,38 @@ public class ResumeService {
         if (resumeDTO == null) {
             return null;
         }
-        return saveSingleResume(resumeDTO);
+        return saveSingleResume(resumeDTO, null);
+    }
+
+    /**
+     * 保存单个简历解析结果并返回主表 ID，可指定业务 resume_id（与 text.resume_id 对齐）
+     */
+    @Transactional
+    public Long saveResumeAndReturnId(ResumeDTO resumeDTO, String businessResumeId) {
+        if (resumeDTO == null) {
+            return null;
+        }
+        return saveSingleResume(resumeDTO, businessResumeId);
     }
 
     /**
      * 保存单个简历及其明细
      */
-    private Long saveSingleResume(ResumeDTO dto) {
+    private Long saveSingleResume(ResumeDTO dto, String businessResumeIdOverride) {
         LocalDateTime now = LocalDateTime.now();
 
         // 1. 保存主表 resume
         ResumeDO resumeDO = new ResumeDO();
         resumeDO.setCreateTime(now);
         resumeDO.setUpdateTime(now);
+
+        String businessResumeId = businessResumeIdOverride;
+        if (businessResumeId == null || businessResumeId.isBlank()) {
+            businessResumeId = dto.getResumeId();
+        }
+        if (businessResumeId != null && !businessResumeId.isBlank()) {
+            resumeDO.setResumeId(businessResumeId.trim());
+        }
 
         // skills / certificates 使用 JSON 字符串存储
         if (dto.getSkills() != null) {
@@ -208,8 +227,25 @@ public class ResumeService {
         return toResumeDTO(resumeDO);
     }
 
+    /**
+     * 按业务 resume_id（resume 表 resume_id 列）加载完整简历 DTO
+     */
+    public ResumeDTO getResumeDetailByBusinessResumeId(String businessResumeId) {
+        if (businessResumeId == null || businessResumeId.isBlank()) {
+            return null;
+        }
+        ResumeDO resumeDO = resumeDAO.selectOne(new LambdaQueryWrapper<ResumeDO>()
+                .eq(ResumeDO::getResumeId, businessResumeId.trim())
+                .last("LIMIT 1"));
+        if (resumeDO == null) {
+            return null;
+        }
+        return toResumeDTO(resumeDO);
+    }
+
     private ResumeDTO toResumeDTO(ResumeDO resumeDO) {
         ResumeDTO dto = new ResumeDTO();
+        dto.setResumeId(resumeDO.getResumeId());
         dto.setSkills(parseStringList(resumeDO.getSkills()));
         dto.setCertificates(parseStringList(resumeDO.getCertificates()));
 
