@@ -104,6 +104,67 @@ public class FileParserUtil {
         return JD_HARD_FILTER_PROMPT_TEMPLATE.formatted(jdText, resumeJson);
     }
 
+    /**
+     * 从 JD 中抽取用于 hybrid 匹配加权的关键词（输出值必须为空格分隔字符串）。
+     */
+    private static final String JD_HYBRID_KEYWORD_PROMPT_TEMPLATE = """
+            你是招聘 JD 结构化助手。请从以下 JD 文本中抽取三个维度关键词：
+            1) work_experience_keywords（工作经验相关）
+            2) skills_keywords（技能相关）
+            3) education_keywords（教育背景相关）
+
+            输出要求：
+            - 仅输出一个 JSON 对象，不要输出任何解释，不要 Markdown 代码块；
+            - 必须且仅包含以下三个键：
+              {
+                "work_experience_keywords": "关键词1 关键词2 关键词3",
+                "skills_keywords": "关键词1 关键词2 关键词3",
+                "education_keywords": "关键词1 关键词2 关键词3"
+              }
+            - 每个字段值必须是“空格分隔”的关键词字符串；
+            - 关键词尽量短、可检索，避免长句；
+            - 若某维度信息不足，返回空字符串。
+
+            【JD 文本】
+            %s
+            """;
+
+    public static String buildJdHybridKeywordPrompt(String jdText) {
+        return JD_HYBRID_KEYWORD_PROMPT_TEMPLATE.formatted(jdText);
+    }
+
+    /**
+     * 基于 JD + Hybrid 打分信息生成最终简历评估。
+     */
+    private static final String RESUME_ANALYSIS_PROMPT_TEMPLATE = """
+            你是资深招聘顾问。请根据岗位 JD 与候选人的 hybrid 筛选评分信息，给出该候选人的综合评估。
+
+            输出要求：
+            - 只输出一个 JSON 对象，不要输出说明文字，不要 Markdown 代码块；
+            - 字段必须包含：
+              {
+                "overall_level": "STRONG_MATCH|POTENTIAL_MATCH|WEAK_MATCH",
+                "overall_score": 0.0,
+                "summary": "中文总结",
+                "strengths": ["..."],
+                "risks": ["..."],
+                "suggestions": ["..."]
+              }
+            - overall_score 范围 0~1；
+            - 结合给定评分字段（如 final_score / work_experience_score / skills_score / education_score / full_text_score）给出解释；
+            - strengths/risks/suggestions 至少各 2 条。
+
+            【岗位 JD】
+            %s
+
+            【候选人筛选信息（JSON）】
+            %s
+            """;
+
+    public static String buildResumeAnalysisPrompt(String jdText, String hybridItemJson) {
+        return RESUME_ANALYSIS_PROMPT_TEMPLATE.formatted(jdText, hybridItemJson);
+    }
+
     public static String extractTextFromFile(MultipartFile file) throws IOException {
         String fileName = file.getOriginalFilename();
         if (fileName == null) {

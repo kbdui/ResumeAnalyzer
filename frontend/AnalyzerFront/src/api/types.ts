@@ -49,6 +49,15 @@ export interface PythonTaskResultPayload {
   } | null
 }
 
+export interface AnalysisItem {
+  id: number
+  taskId: number
+  resumeId: string
+  analysisJson: string
+  createTime: string
+  updateTime: string
+}
+
 export interface AnalyzeSubmitResponse {
   analyzeTaskId: string
   taskId: string

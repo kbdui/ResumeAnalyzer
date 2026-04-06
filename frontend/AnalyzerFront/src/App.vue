@@ -9,7 +9,7 @@ const route = useRoute()
  */
 const activeMenuPath = computed(() => {
   const p = route.path
-  if (p === '/' || p === '') return '/screen'
+  if (p === '/' || p === '') return '/workflow'
   return p
 })
 </script>
@@ -32,8 +32,8 @@ const activeMenuPath = computed(() => {
         :default-active="activeMenuPath"
         class="nav-menu"
       >
-        <el-menu-item index="/screen">简历筛选</el-menu-item>
-        <el-menu-item index="/analyze">深度分析</el-menu-item>
+        <el-menu-item index="/workflow">流程编排</el-menu-item>
+        <el-menu-item index="/analyze">最终评估</el-menu-item>
         <el-menu-item index="/history">历史记录</el-menu-item>
       </el-menu>
     </el-header>

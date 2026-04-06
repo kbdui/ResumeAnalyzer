@@ -8,12 +8,16 @@ const router = createRouter({
     // 默认重定向到筛选页面
     {
       path: '/',
-      redirect: '/screen',
+      redirect: '/workflow',
+    },
+    {
+      path: '/workflow',
+      name: 'workflow',
+      component: UploadAndScreenPage,
     },
     {
       path: '/screen',
-      name: 'screen',
-      component: UploadAndScreenPage,
+      redirect: '/workflow',
     },
     {
       path: '/analyze',

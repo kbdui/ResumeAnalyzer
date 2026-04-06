@@ -103,6 +103,41 @@ public class DeepseekBaseService {
         return objectMapper.readTree(json);
     }
 
+    /**
+     * 从 JD 中抽取 hybrid 匹配加权关键词（工作经验/技能/教育），返回 JSON 根节点。
+     */
+    public JsonNode extractHybridJdKeywords(
+            String apiKey,
+            String jdText,
+            boolean useSiliconFlow) throws IOException {
+        String prompt = FileParserUtil.buildJdHybridKeywordPrompt(jdText);
+        String jsonResponse = deepseekClient.getResponse(apiKey, prompt, useSiliconFlow);
+        String content = extractAssistantContent(jsonResponse);
+        String json = stripMarkdownJsonBlock(content);
+        return objectMapper.readTree(json);
+    }
+
+    /**
+     * 基于 JD 与 hybrid 评分信息生成最终简历评估。
+     */
+    public JsonNode analyzeHybridResume(
+            String apiKey,
+            String jdText,
+            JsonNode hybridItem,
+            boolean useSiliconFlow) throws IOException {
+        String hybridItemJson;
+        try {
+            hybridItemJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(hybridItem);
+        } catch (Exception e) {
+            hybridItemJson = String.valueOf(hybridItem);
+        }
+        String prompt = FileParserUtil.buildResumeAnalysisPrompt(jdText, hybridItemJson);
+        String jsonResponse = deepseekClient.getResponse(apiKey, prompt, useSiliconFlow);
+        String content = extractAssistantContent(jsonResponse);
+        String json = stripMarkdownJsonBlock(content);
+        return objectMapper.readTree(json);
+    }
+
     private static String stripMarkdownJsonBlock(String content) {
         if (content == null) {
             return "{}";

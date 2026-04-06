@@ -15,6 +15,12 @@ public class ResumeHybridRequest {
      */
     private String taskId;
     private String jdText;
+    /**
+     * 由 LLM 从 JD 中抽取的关键词（空格分隔）
+     */
+    private String workExperienceKeywords;
+    private String skillsKeywords;
+    private String educationKeywords;
     private List<TextDTO> resumes;
     private Integer topK = 20;
     private Integer recallK = 200;

@@ -3,10 +3,12 @@ package com.app.web;
 import com.app.dto.ResumeDTO;
 import com.app.dto.AnalyzeSubmitResponseDTO;
 import com.app.dto.AnalyzeTaskStatusDTO;
+import com.app.entity.AnalysisDO;
 import com.app.request.ChatRequest;
 import com.app.request.JdHardFilterRequest;
 import com.app.service.DeepseekBaseService;
 import com.app.service.repository.ResumeService;
+import com.app.service.DeepseekAnalyzeService;
 import com.app.service.DeepseekExtractService;
 import com.app.service.ResumeFilterService;
 import com.app.tool.ApiResponse;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 
 @RestController
@@ -27,16 +30,19 @@ public class DeepseekController {
 
     private final DeepseekBaseService deepseekBaseService;
     private final ResumeService resumeService;
+    private final DeepseekAnalyzeService deepseekAnalyzeService;
     private final DeepseekExtractService deepseekExtractService;
     private final ResumeFilterService resumeFilterService;
 
     @Autowired
     public DeepseekController(DeepseekBaseService deepseekBaseService,
                               ResumeService resumeService,
+                              DeepseekAnalyzeService deepseekAnalyzeService,
                               DeepseekExtractService deepseekExtractService,
                               ResumeFilterService resumeFilterService) {
         this.deepseekBaseService = deepseekBaseService;
         this.resumeService = resumeService;
+        this.deepseekAnalyzeService = deepseekAnalyzeService;
         this.deepseekExtractService = deepseekExtractService;
         this.resumeFilterService = resumeFilterService;
     }
@@ -83,15 +89,20 @@ public class DeepseekController {
     @PostMapping("/{taskId}/extract")
     public ApiResponse<AnalyzeSubmitResponseDTO> submitExtractTask(
             @PathVariable("taskId") String taskId,
-            @RequestParam(value = "model", defaultValue = "v3") String model) {
+            @RequestParam(value = "model", defaultValue = "v3") String model,
+            @RequestParam(value = "batchSize", defaultValue = "5") Integer batchSize) {
         if (taskId == null || taskId.isBlank()) {
             return ApiResponse.error(400, "taskId 不能为空");
+        }
+        if (batchSize == null || batchSize < 1) {
+            return ApiResponse.error(400, "batchSize 必须 >= 1");
         }
         try {
             String analyzeTaskId = deepseekExtractService.submitExtractTask(
                     taskId,
                     apiKey,
-                    Objects.equals(model, "v3")
+                    Objects.equals(model, "v3"),
+                    batchSize
             );
             AnalyzeSubmitResponseDTO response = new AnalyzeSubmitResponseDTO();
             response.setAnalyzeTaskId(analyzeTaskId);
@@ -108,7 +119,10 @@ public class DeepseekController {
      */
     @GetMapping("/analyze/{analyzeTaskId}")
     public ApiResponse<AnalyzeTaskStatusDTO> getExtractTaskStatus(@PathVariable("analyzeTaskId") String analyzeTaskId) {
-        AnalyzeTaskStatusDTO status = deepseekExtractService.getExtractTaskStatus(analyzeTaskId);
+        AnalyzeTaskStatusDTO status = deepseekAnalyzeService.getAnalyzeTaskStatus(analyzeTaskId);
+        if (status == null) {
+            status = deepseekExtractService.getExtractTaskStatus(analyzeTaskId);
+        }
         if (status == null) {
             status = resumeFilterService.getHardFilterTaskStatus(analyzeTaskId);
         }
@@ -116,6 +130,37 @@ public class DeepseekController {
             return ApiResponse.error(404, "任务不存在: " + analyzeTaskId);
         }
         return ApiResponse.success(status);
+    }
+
+    /**
+     * 将 hybrid_result 提交给 LLM 做最终评估分析，并入库 analysis 表。
+     */
+    @PostMapping("/{taskId}/analyze")
+    public ApiResponse<AnalyzeSubmitResponseDTO> submitFinalAnalyzeTask(
+            @PathVariable("taskId") String taskId,
+            @RequestParam(value = "model", defaultValue = "v3") String model,
+            @RequestParam(value = "batchSize", defaultValue = "5") Integer batchSize) {
+        if (taskId == null || taskId.isBlank()) {
+            return ApiResponse.error(400, "taskId 不能为空");
+        }
+        if (batchSize == null || batchSize < 1) {
+            return ApiResponse.error(400, "batchSize 必须 >= 1");
+        }
+        try {
+            String analyzeTaskId = deepseekAnalyzeService.submitAnalyzeTask(
+                    taskId,
+                    apiKey,
+                    Objects.equals(model, "v3"),
+                    batchSize
+            );
+            AnalyzeSubmitResponseDTO response = new AnalyzeSubmitResponseDTO();
+            response.setAnalyzeTaskId(analyzeTaskId);
+            response.setTaskId(taskId);
+            response.setMessage("最终评估任务已提交");
+            return ApiResponse.success(response);
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error(400, e.getMessage());
+        }
     }
 
     /**
@@ -161,5 +206,21 @@ public class DeepseekController {
             return ApiResponse.error(404, "硬过滤任务不存在: " + hardFilterTaskId);
         }
         return ApiResponse.success(status);
+    }
+
+    /**
+     * 查询 task 下最终评估列表（analysis 表）。
+     */
+    @GetMapping("/{taskId}/analysis")
+    public ApiResponse<List<AnalysisDO>> listAnalysisByTaskId(@PathVariable("taskId") String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            return ApiResponse.error(400, "taskId 不能为空");
+        }
+        try {
+            List<AnalysisDO> rows = deepseekAnalyzeService.listAnalysisByBusinessTaskId(taskId);
+            return ApiResponse.success(rows);
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error(400, e.getMessage());
+        }
     }
 }

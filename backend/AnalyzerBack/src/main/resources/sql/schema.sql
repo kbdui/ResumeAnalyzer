@@ -147,7 +147,25 @@ CREATE TABLE `task_resume` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务与业务简历关联（过滤/分析）';
 
 -- ----------------------------
--- 9. 混合匹配结果表（Python FastAPI 词法/语义匹配结果，原 task_result）
+-- 9. JD 关键词提取结果表（供 hybrid 匹配加权）
+-- ----------------------------
+DROP TABLE IF EXISTS `jd_extract`;
+CREATE TABLE `jd_extract` (
+    `id`                         BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id`                    BIGINT        NOT NULL COMMENT '任务ID',
+    `jd_text`                    MEDIUMTEXT    NOT NULL COMMENT '完整 JD 文本',
+    `work_experience_keywords`   TEXT          DEFAULT NULL COMMENT '工作经验关键词（空格分隔）',
+    `skills_keywords`            TEXT          DEFAULT NULL COMMENT '技能关键词（空格分隔）',
+    `education_keywords`         TEXT          DEFAULT NULL COMMENT '教育关键词（空格分隔）',
+    `create_time`                DATETIME      DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`                DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_jd_extract_task_id` (`task_id`),
+    CONSTRAINT `fk_jd_extract_task` FOREIGN KEY (`task_id`) REFERENCES `task` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='JD 关键词提取结果表';
+
+-- ----------------------------
+-- 10. 混合匹配结果表（Python FastAPI 词法/语义匹配结果，原 task_result）
 -- ----------------------------
 DROP TABLE IF EXISTS `hybrid_result`;
 CREATE TABLE `hybrid_result` (
@@ -161,4 +179,21 @@ CREATE TABLE `hybrid_result` (
     UNIQUE KEY `uk_hybrid_result_task_id` (`task_id`),
     CONSTRAINT `fk_hybrid_result_task` FOREIGN KEY (`task_id`) REFERENCES `task` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='混合匹配结果表';
+
+-- ----------------------------
+-- 11. 最终评估表（LLM 基于 JD + hybrid 评分给出简历评估）
+-- ----------------------------
+DROP TABLE IF EXISTS `analysis`;
+CREATE TABLE `analysis` (
+    `id`           BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id`      BIGINT        NOT NULL COMMENT '任务ID',
+    `resume_id`    VARCHAR(64)   NOT NULL COMMENT '业务简历ID',
+    `analysis_json` MEDIUMTEXT   NOT NULL COMMENT 'LLM评估结果JSON',
+    `create_time`  DATETIME      DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`  DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_analysis_task_resume` (`task_id`, `resume_id`),
+    KEY `idx_analysis_task_id` (`task_id`),
+    CONSTRAINT `fk_analysis_task` FOREIGN KEY (`task_id`) REFERENCES `task` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='最终评估表';
 

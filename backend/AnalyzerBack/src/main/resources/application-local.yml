@@ -32,6 +32,14 @@ deepseek:
     model:
       chat: deepseek-chat
       reasoner: deepseek-reasoner   # useSiliconFlow 时使用
+  extract:
+    llm:
+      executor-threads: 5
+      queue-capacity: 200
+  analyze:
+    llm:
+      executor-threads: 5
+      queue-capacity: 200
 
 # java端传向的FastAPI端口
 python:

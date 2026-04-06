@@ -95,11 +95,17 @@ public class PythonService {
             ((tools.jackson.databind.node.ObjectNode) root).set("jd_text", root.get("jdText"));
             ((tools.jackson.databind.node.ObjectNode) root).set("top_k", root.get("topK"));
             ((tools.jackson.databind.node.ObjectNode) root).set("recall_k", root.get("recallK"));
+            ((tools.jackson.databind.node.ObjectNode) root).set("work_experience_keywords", root.get("workExperienceKeywords"));
+            ((tools.jackson.databind.node.ObjectNode) root).set("skills_keywords", root.get("skillsKeywords"));
+            ((tools.jackson.databind.node.ObjectNode) root).set("education_keywords", root.get("educationKeywords"));
             // taskId 仅用于 controller 层，不属于 Python payload
             ((tools.jackson.databind.node.ObjectNode) root).remove("taskId");
             ((tools.jackson.databind.node.ObjectNode) root).remove("jdText");
             ((tools.jackson.databind.node.ObjectNode) root).remove("topK");
             ((tools.jackson.databind.node.ObjectNode) root).remove("recallK");
+            ((tools.jackson.databind.node.ObjectNode) root).remove("workExperienceKeywords");
+            ((tools.jackson.databind.node.ObjectNode) root).remove("skillsKeywords");
+            ((tools.jackson.databind.node.ObjectNode) root).remove("educationKeywords");
         }
         return root;
     }

@@ -1,10 +1,10 @@
 import { get, post } from './http'
 import type {
+  AnalysisItem,
   AnalyzeSubmitResponse,
   AnalyzeTaskStatus,
   PythonTaskResultPayload,
   TaskItem,
-  TaskResumeMainView,
   UploadResponse,
 } from './types'
 
@@ -24,29 +24,37 @@ export function submitMatchTask(payload: {
   topK?: number
   recallK?: number
 }) {
-  return post<string>('/screen/match/task', payload)
+  return post<string>('/hybrid/match/task', payload)
 }
 
 export function queryMatchTask(taskId: string) {
-  return get<PythonTaskResultPayload>(`/screen/match/task/${taskId}`)
+  return get<PythonTaskResultPayload>(`/hybrid/match/task/${taskId}`)
+}
+
+export function submitExtractTask(taskId: string, batchSize = 5) {
+  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/extract?batchSize=${batchSize}`)
+}
+
+export function submitHardFilterTask(taskId: string, payload: { jdText: string }) {
+  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/hard-filter`, payload)
+}
+
+export function queryHardFilterTask(hardFilterTaskId: string) {
+  return get<AnalyzeTaskStatus>(`/deepseek/hard-filter/${hardFilterTaskId}`)
 }
 
 export function submitAnalyzeTask(taskId: string) {
   return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/analyze`)
 }
 
+export function submitAnalyzeTaskWithBatch(taskId: string, batchSize = 5) {
+  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/analyze?batchSize=${batchSize}`)
+}
+
 export function queryAnalyzeTask(analyzeTaskId: string) {
   return get<AnalyzeTaskStatus>(`/deepseek/analyze/${analyzeTaskId}`)
 }
 
-export function listResumeByTask(taskId: string) {
-  return get<TaskResumeMainView[]>(`/resume/task/${taskId}`)
-}
-
-export function listAnalyzeTasksByTask(taskId: string) {
-  return get<string[]>(`/deepseek/analyze-tasks/${taskId}`)
-}
-
-export function listResumeByTaskAndAnalyzeTask(taskId: string, analyzeTaskId: string) {
-  return get<TaskResumeMainView[]>(`/resume/task/${taskId}/analyze/${analyzeTaskId}`)
+export function listAnalysisByTask(taskId: string) {
+  return get<AnalysisItem[]>(`/deepseek/${taskId}/analysis`)
 }

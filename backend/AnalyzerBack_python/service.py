@@ -62,13 +62,21 @@ def _extract_keywords(text: str, max_terms: int = 40) -> List[str]:
     return unique
 
 
-def _keyword_coverage(resume: ResumeDocument, jd_text: str) -> float:
-    jd_terms = _extract_keywords(jd_text)
+def _split_keyword_str(keyword_str: str) -> List[str]:
+    return [t.strip() for t in (keyword_str or "").split(" ") if t and t.strip()]
+
+
+def _keyword_coverage_from_terms(resume_text: str, jd_terms: List[str]) -> float:
     if not jd_terms:
         return 0.0
-    pool_text = resume.text or ""
+    pool_text = resume_text or ""
     matched = sum(1 for term in jd_terms if term in pool_text)
     return matched / len(jd_terms)
+
+
+def _keyword_coverage(resume: ResumeDocument, jd_text: str) -> float:
+    jd_terms = _extract_keywords(jd_text)
+    return _keyword_coverage_from_terms(resume.text or "", jd_terms)
 
 
 def _recall_stage(req: MatchPipelineRequest) -> List[Dict[str, Any]]:
@@ -90,6 +98,7 @@ def _recall_stage(req: MatchPipelineRequest) -> List[Dict[str, Any]]:
                 "tfidf_score": float(tfidf_score),
                 "keyword_coverage": float(coverage),
                 "top_terms": top_terms,
+                "full_text_score": float(recall_score),
             }
         )
     candidates.sort(key=lambda x: x["recall_score"], reverse=True)
@@ -108,12 +117,38 @@ def _embed_score(resume: Dict[str, Any], jd_text: str) -> float:
     return float(np.dot(vec[0], vec[1]))
 
 
-def _rerank_stage(candidates: List[Dict[str, Any]], jd_text: str, top_k: int) -> Dict[str, Any]:
+def _rerank_stage(candidates: List[Dict[str, Any]], jd_text: Dict[str, Any], top_k: int) -> Dict[str, Any]:
+    # 来自 LLM 的 JD 维度关键词（空格分隔字符串）
+    work_terms = _split_keyword_str(jd_text.get("work_experience_keywords") if isinstance(jd_text, dict) else "")
+    skills_terms = _split_keyword_str(jd_text.get("skills_keywords") if isinstance(jd_text, dict) else "")
+    edu_terms = _split_keyword_str(jd_text.get("education_keywords") if isinstance(jd_text, dict) else "")
+
     results = []
     for c in candidates:
-        emb_score = _embed_score(c, jd_text)
-        final_score = 0.65 * emb_score + 0.35 * c["recall_score"]
-        c["embedding_score"] = float(emb_score)
+        text = c.get("text") or ""
+        work_experience_score = _keyword_coverage_from_terms(text, work_terms)
+        skills_score = _keyword_coverage_from_terms(text, skills_terms)
+        education_score = _keyword_coverage_from_terms(text, edu_terms)
+        # full_text_score 继续使用对完整 JD 的召回得分（tfidf + coverage）
+        full_text_score = float(c.get("full_text_score", 0.0))
+        # 如果没有可用关键词，退化为旧逻辑的 full_text_score 作为三个维度基准，避免全部归零
+        if not work_terms:
+            work_experience_score = full_text_score
+        if not skills_terms:
+            skills_score = full_text_score
+        if not edu_terms:
+            education_score = full_text_score
+
+        final_score = (
+            0.45 * work_experience_score
+            + 0.35 * skills_score
+            + 0.10 * education_score
+            + 0.10 * full_text_score
+        )
+        c["work_experience_score"] = float(work_experience_score)
+        c["skills_score"] = float(skills_score)
+        c["education_score"] = float(education_score)
+        c["full_text_score"] = float(full_text_score)
         c["final_score"] = float(final_score)
         results.append(c)
     results.sort(key=lambda x: x["final_score"], reverse=True)
@@ -128,7 +163,13 @@ def _rerank_stage(candidates: List[Dict[str, Any]], jd_text: str, top_k: int) ->
 def run_pipeline(req: MatchPipelineRequest) -> Dict[str, Any]:
     start = _now()
     recall_candidates = _recall_stage(req)
-    rerank = _rerank_stage(recall_candidates, req.jd_text, req.top_k)
+    jd_features = {
+        "jd_text": req.jd_text,
+        "work_experience_keywords": req.work_experience_keywords,
+        "skills_keywords": req.skills_keywords,
+        "education_keywords": req.education_keywords,
+    }
+    rerank = _rerank_stage(recall_candidates, jd_features, req.top_k)
     return {
         "summary": {
             "total_resumes": len(req.resumes),
