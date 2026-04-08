@@ -106,35 +106,65 @@ public class ResumeService {
     private Long saveSingleResume(ResumeDTO dto, String businessResumeIdOverride) {
         LocalDateTime now = LocalDateTime.now();
 
-        // 1. 保存主表 resume
-        ResumeDO resumeDO = new ResumeDO();
-        resumeDO.setCreateTime(now);
-        resumeDO.setUpdateTime(now);
-
         String businessResumeId = businessResumeIdOverride;
         if (businessResumeId == null || businessResumeId.isBlank()) {
             businessResumeId = dto.getResumeId();
         }
-        if (businessResumeId != null && !businessResumeId.isBlank()) {
-            resumeDO.setResumeId(businessResumeId.trim());
+        if (businessResumeId != null) {
+            businessResumeId = businessResumeId.trim();
+            if (businessResumeId.isBlank()) {
+                businessResumeId = null;
+            }
+        }
+
+        // 命中同 business resume_id 时覆盖旧记录（主表 update + 明细重写）。
+        ResumeDO existing = null;
+        if (businessResumeId != null) {
+            existing = resumeDAO.selectOne(new LambdaQueryWrapper<ResumeDO>()
+                    .eq(ResumeDO::getResumeId, businessResumeId)
+                    .last("LIMIT 1"));
         }
 
         // skills / certificates 使用 JSON 字符串存储
+        String skillsJson = null;
         if (dto.getSkills() != null) {
-            resumeDO.setSkills(toJson(dto.getSkills()));
+            skillsJson = toJson(dto.getSkills());
         }
+        String certificatesJson = null;
         if (dto.getCertificates() != null) {
-            resumeDO.setCertificates(toJson(dto.getCertificates()));
+            certificatesJson = toJson(dto.getCertificates());
         }
 
-        resumeDAO.insert(resumeDO);
-        Long resumeId = resumeDO.getId();
+        Long resumeId;
+        if (existing == null) {
+            // 1. 新增主表 resume
+            ResumeDO resumeDO = new ResumeDO();
+            resumeDO.setCreateTime(now);
+            resumeDO.setUpdateTime(now);
+            resumeDO.setResumeId(businessResumeId);
+            resumeDO.setSkills(skillsJson);
+            resumeDO.setCertificates(certificatesJson);
+            resumeDAO.insert(resumeDO);
+            resumeId = resumeDO.getId();
+        } else {
+            // 1. 覆盖更新主表 resume
+            ResumeDO update = new ResumeDO();
+            update.setId(existing.getId());
+            update.setResumeId(businessResumeId);
+            update.setSkills(skillsJson);
+            update.setCertificates(certificatesJson);
+            update.setUpdateTime(now);
+            resumeDAO.updateById(update);
+            resumeId = existing.getId();
+            // 2. 清空旧明细，后续按最新解析结果重写
+            clearResumeDetails(resumeId);
+        }
         if (resumeId == null) {
             // 未获取到自增主键，直接返回避免 NPE
             return null;
         }
 
-        // 2. 个人信息
+        // 3. 个人信息
         PersonalInfoDTO personalInfoDTO = dto.getPersonalInfo();
         if (personalInfoDTO != null) {
             PersonalInfoDO infoDO = new PersonalInfoDO();
@@ -147,7 +177,7 @@ public class ResumeService {
             personalInfoDAO.insert(infoDO);
         }
 
-        // 3. 教育经历
+        // 4. 教育经历
         List<EducationDTO> educationList = dto.getEducation();
         if (educationList != null && !educationList.isEmpty()) {
             for (int i = 0; i < educationList.size(); i++) {
@@ -165,7 +195,7 @@ public class ResumeService {
             }
         }
 
-        // 4. 工作经历
+        // 5. 工作经历
         List<WorkExperienceDTO> workList = dto.getWorkExperience();
         if (workList != null && !workList.isEmpty()) {
             for (int i = 0; i < workList.size(); i++) {
@@ -183,7 +213,7 @@ public class ResumeService {
             }
         }
 
-        // 5. 项目经历
+        // 6. 项目经历
         List<ProjectDTO> projectList = dto.getProjects();
         if (projectList != null && !projectList.isEmpty()) {
             for (int i = 0; i < projectList.size(); i++) {
@@ -202,6 +232,23 @@ public class ResumeService {
             }
         }
         return resumeId;
+    }
+
+    /**
+     * 删除某份简历的全部明细记录，供覆盖写入时重建。
+     */
+    private void clearResumeDetails(Long resumeId) {
+        if (resumeId == null) {
+            return;
+        }
+        personalInfoDAO.delete(new LambdaQueryWrapper<PersonalInfoDO>()
+                .eq(PersonalInfoDO::getResumeId, resumeId));
+        educationDAO.delete(new LambdaQueryWrapper<EducationDO>()
+                .eq(EducationDO::getResumeId, resumeId));
+        workExperienceDAO.delete(new LambdaQueryWrapper<WorkExperienceDO>()
+                .eq(WorkExperienceDO::getResumeId, resumeId));
+        projectDAO.delete(new LambdaQueryWrapper<ProjectDO>()
+                .eq(ProjectDO::getResumeId, resumeId));
     }
 
     /**

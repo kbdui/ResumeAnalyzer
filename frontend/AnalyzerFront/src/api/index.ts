@@ -3,8 +3,10 @@ import type {
   AnalysisItem,
   AnalyzeSubmitResponse,
   AnalyzeTaskStatus,
+  ExtractedResumeItem,
   PythonTaskResultPayload,
   TaskItem,
+  TaskResumeItem,
   UploadResponse,
 } from './types'
 
@@ -35,6 +37,10 @@ export function submitExtractTask(taskId: string, batchSize = 5) {
   return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/extract?batchSize=${batchSize}`)
 }
 
+export function queryExtractTask(extractTaskId: string) {
+  return get<AnalyzeTaskStatus>(`/deepseek/extract/${extractTaskId}`)
+}
+
 export function submitHardFilterTask(taskId: string, payload: { jdText: string }) {
   return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/hard-filter`, payload)
 }
@@ -57,4 +63,12 @@ export function queryAnalyzeTask(analyzeTaskId: string) {
 
 export function listAnalysisByTask(taskId: string) {
   return get<AnalysisItem[]>(`/deepseek/${taskId}/analysis`)
+}
+
+export function listExtractedResumeByTask(taskId: string) {
+  return get<ExtractedResumeItem[]>(`/resume/task/${taskId}`)
+}
+
+export function listTaskResumeByTask(taskId: string) {
+  return get<TaskResumeItem[]>(`/task-resume/${taskId}/list`)
 }

@@ -41,6 +41,7 @@ public class DeepseekExtractService {
     private final ResumeService resumeService;
     private final TextDAO textDAO;
     private final int llmQueueCapacity;
+    private final int maxBatchSize;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private final ExecutorService llmExecutor;
@@ -51,13 +52,15 @@ public class DeepseekExtractService {
                                   ResumeService resumeService,
                                   TextDAO textDAO,
                                   @Value("${deepseek.extract.llm.executor-threads:5}") int llmThreads,
-                                  @Value("${deepseek.extract.llm.queue-capacity:200}") int llmQueueCapacity) {
+                                  @Value("${deepseek.extract.llm.queue-capacity:200}") int llmQueueCapacity,
+                                  @Value("${deepseek.extract.batch.max-size:20}") int maxBatchSize) {
         this.taskService = taskService;
         this.deepseekBaseService = deepseekBaseService;
         this.resumeService = resumeService;
         this.textDAO = textDAO;
         int normalizedThreads = Math.max(1, llmThreads);
         this.llmQueueCapacity = Math.max(1, llmQueueCapacity);
+        this.maxBatchSize = Math.max(1, maxBatchSize);
         this.llmExecutor = new ThreadPoolExecutor(
                 normalizedThreads,
                 normalizedThreads,
@@ -111,6 +114,11 @@ public class DeepseekExtractService {
             throw new IllegalArgumentException("task 下没有有效文本内容: " + taskId);
         }
 
+        int parallelBatchSize = (batchSize == null || batchSize < 1) ? DEFAULT_BATCH_SIZE : batchSize;
+        if (parallelBatchSize > maxBatchSize) {
+            throw new IllegalArgumentException("batchSize 不能大于 " + maxBatchSize + "，当前: " + parallelBatchSize);
+        }
+
         String analyzeTaskId = UUID.randomUUID().toString();
         AnalyzeTaskStatusDTO status = new AnalyzeTaskStatusDTO();
         status.setAnalyzeTaskId(analyzeTaskId);
@@ -121,7 +129,6 @@ public class DeepseekExtractService {
         status.setFailedCount(0);
         statusStore.put(analyzeTaskId, status);
 
-        int parallelBatchSize = (batchSize == null || batchSize < 1) ? DEFAULT_BATCH_SIZE : batchSize;
         executor.submit(() -> runExtractJob(analyzeTaskId, task, items, apiKey, useSiliconFlow, parallelBatchSize));
         return analyzeTaskId;
     }

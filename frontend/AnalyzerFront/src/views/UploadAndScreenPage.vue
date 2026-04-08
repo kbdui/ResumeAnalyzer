@@ -102,38 +102,52 @@ async function runStep(handler: () => Promise<void>, successMsg: string) {
     ElMessage.error((error as Error).message || '执行失败')
   }
 }
+
+function formatScore(value?: number | null) {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return '-'
+  }
+  return value.toFixed(3)
+}
 </script>
 
 <template>
   <div class="page-container">
-    <WorkflowUploadCard :loading="uploadLoading" :upload-result="uploadResult" @submit="onUpload" />
-
-    <WorkflowContextCard
-      :task-id="taskId"
-      :jd-text="jdText"
-      :running-pipeline="runningPipeline"
-      @update:task-id="setTaskId"
-      @update:jd-text="setJdText"
-      @run-all="onRunAll"
-      @refresh="refreshResultsOnly"
-    />
+    <el-row :gutter="16" class="top-row">
+      <el-col :xs="24" :md="12">
+        <WorkflowUploadCard :loading="uploadLoading" :upload-result="uploadResult" @submit="onUpload" />
+      </el-col>
+      <el-col :xs="24" :md="12">
+        <WorkflowContextCard
+          :task-id="taskId"
+          :jd-text="jdText"
+          :running-pipeline="runningPipeline"
+          @update:task-id="setTaskId"
+          @update:jd-text="setJdText"
+          @run-all="onRunAll"
+          @refresh="refreshResultsOnly"
+        />
+      </el-col>
+    </el-row>
 
     <el-row :gutter="16">
       <el-col :xs="24" :md="12">
         <StepExtractPanel
+          :current-task-id="taskId"
           :batch-size="extractBatchSize"
           :running="runningExtract"
           :task-ref-id="extractTaskId"
-          :status="extractStatus?.status"
+          :status-data="extractStatus"
           @update:batch-size="setExtractBatchSize"
           @run="runStep(runExtractStep, '提取完成')"
         />
       </el-col>
       <el-col :xs="24" :md="12">
         <StepHardFilterPanel
+          :current-task-id="taskId"
           :running="runningHardFilter"
           :task-ref-id="hardFilterTaskId"
-          :status="hardFilterStatus?.status"
+          :status-data="hardFilterStatus"
           @run="runStep(runHardFilterStep, '硬过滤完成')"
         />
       </el-col>
@@ -142,10 +156,11 @@ async function runStep(handler: () => Promise<void>, successMsg: string) {
     <el-row :gutter="16">
       <el-col :xs="24" :md="12">
         <StepHybridPanel
+          :current-task-id="taskId"
           :top-k="topK"
           :recall-k="recallK"
           :running="runningHybrid"
-          :status="matchResult?.status?.toUpperCase()"
+          :result-data="matchResult"
           @update:top-k="setTopK"
           @update:recall-k="setRecallK"
           @run="runStep(runHybridStep, '召回筛选完成')"
@@ -153,10 +168,11 @@ async function runStep(handler: () => Promise<void>, successMsg: string) {
       </el-col>
       <el-col :xs="24" :md="12">
         <StepAnalyzePanel
+          :current-task-id="taskId"
           :batch-size="analyzeBatchSize"
           :running="runningAnalyze"
           :task-ref-id="analyzeTaskId"
-          :status="analyzeStatus?.status"
+          :status-data="analyzeStatus"
           @update:batch-size="setAnalyzeBatchSize"
           @run="runStep(runAnalyzeStep, '大模型评估完成')"
         />
@@ -169,7 +185,9 @@ async function runStep(handler: () => Promise<void>, successMsg: string) {
         <el-table-column type="index" width="60" />
         <el-table-column prop="resume_id" label="简历ID" min-width="180" />
         <el-table-column prop="file_name" label="文件名" min-width="180" />
-        <el-table-column prop="final_score" label="综合分" width="120" />
+        <el-table-column prop="final_score" label="综合分" width="120">
+          <template #default="{ row }">{{ formatScore(row.final_score) }}</template>
+        </el-table-column>
         <el-table-column prop="work_experience_score" label="工作经验分" width="120" />
         <el-table-column prop="skills_score" label="技能分" width="100" />
         <el-table-column prop="education_score" label="教育分" width="100" />
@@ -205,4 +223,7 @@ async function runStep(handler: () => Promise<void>, successMsg: string) {
 
 <style scoped>
 .page-container { display: flex; flex-direction: column; gap: 20px; }
+.top-row { align-items: stretch; }
+.top-row :deep(.el-col) { display: flex; }
+.top-row :deep(.panel-card) { width: 100%; height: 100%; }
 </style>

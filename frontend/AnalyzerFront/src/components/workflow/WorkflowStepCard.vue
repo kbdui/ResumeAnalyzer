@@ -5,6 +5,7 @@ defineProps<{
   step: number
   title: string
   description?: string
+  currentTaskId?: string
   taskRefId?: string
   status?: string
 }>()
@@ -29,8 +30,13 @@ defineProps<{
       <slot />
     </div>
 
-    <el-descriptions v-if="taskRefId" :column="1" border size="small" class="meta">
-      <el-descriptions-item label="任务ID">{{ taskRefId }}</el-descriptions-item>
+    <el-descriptions v-if="currentTaskId || taskRefId" :column="1" border size="small" class="meta">
+      <el-descriptions-item v-if="currentTaskId" label="当前Task">
+        {{ currentTaskId }}
+      </el-descriptions-item>
+      <el-descriptions-item v-if="taskRefId" label="执行任务ID">
+        {{ taskRefId }}
+      </el-descriptions-item>
     </el-descriptions>
   </el-card>
 </template>

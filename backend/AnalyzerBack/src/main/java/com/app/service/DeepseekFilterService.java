@@ -18,6 +18,8 @@ import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,7 +31,7 @@ import java.util.concurrent.Executors;
  * 按 JD 对 task 下简历异步批量调用大模型做三态硬过滤，结果写入 task_resume。
  */
 @Service
-public class ResumeFilterService {
+public class DeepseekFilterService {
 
     private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_RUNNING = "RUNNING";
@@ -49,12 +51,12 @@ public class ResumeFilterService {
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private final ConcurrentMap<String, AnalyzeTaskStatusDTO> statusStore = new ConcurrentHashMap<>();
 
-    public ResumeFilterService(TaskService taskService,
-                               TextDAO textDAO,
-                               ResumeService resumeService,
-                               TaskResumeDAO taskResumeDAO,
-                               DeepseekBaseService deepseekBaseService,
-                               ObjectMapper objectMapper) {
+    public DeepseekFilterService(TaskService taskService,
+                                 TextDAO textDAO,
+                                 ResumeService resumeService,
+                                 TaskResumeDAO taskResumeDAO,
+                                 DeepseekBaseService deepseekBaseService,
+                                 ObjectMapper objectMapper) {
         this.taskService = taskService;
         this.textDAO = textDAO;
         this.resumeService = resumeService;
@@ -64,7 +66,7 @@ public class ResumeFilterService {
     }
 
     /**
-     * 提交异步硬过滤任务，返回与深度分析相同的 jobId，供 GET /deepseek/analyze/{id} 轮询。
+     * 提交异步硬过滤任务，供 GET /deepseek/hard-filter/{id} 轮询。
      */
     public String submitHardFilterTask(String businessTaskId, String jdText, String apiKey, boolean useSiliconFlow) {
         if (jdText == null || jdText.isBlank()) {
@@ -81,18 +83,31 @@ public class ResumeFilterService {
             throw new IllegalArgumentException("task 下没有可过滤的文本: " + businessTaskId);
         }
 
+        // 以 text 表中的业务 resume_id 为任务范围，去重后逐个从 resume 表加载结构化数据。
+        LinkedHashSet<String> businessResumeIds = new LinkedHashSet<>();
+        for (TextDO row : rows) {
+            if (row == null || row.getResumeId() == null || row.getResumeId().isBlank()) {
+                continue;
+            }
+            businessResumeIds.add(row.getResumeId().trim());
+        }
+        if (businessResumeIds.isEmpty()) {
+            throw new IllegalArgumentException("task 下缺少可过滤的业务 resume_id: " + businessTaskId);
+        }
+        List<String> resumeIdList = new ArrayList<>(businessResumeIds);
+
         String filterTaskId = UUID.randomUUID().toString();
         AnalyzeTaskStatusDTO status = new AnalyzeTaskStatusDTO();
         status.setAnalyzeTaskId(filterTaskId);
         status.setTaskId(businessTaskId);
         status.setStatus(STATUS_QUEUED);
-        status.setTotal(rows.size());
+        status.setTotal(resumeIdList.size());
         status.setSuccessCount(0);
         status.setFailedCount(0);
         statusStore.put(filterTaskId, status);
 
         String jd = jdText.trim();
-        executor.submit(() -> runHardFilterJob(filterTaskId, task, jd, rows, apiKey, useSiliconFlow));
+        executor.submit(() -> runHardFilterJob(filterTaskId, task, jd, resumeIdList, apiKey, useSiliconFlow));
         return filterTaskId;
     }
 
@@ -103,7 +118,7 @@ public class ResumeFilterService {
     private void runHardFilterJob(String filterTaskId,
                                   TaskDO task,
                                   String jdText,
-                                  List<TextDO> rows,
+                                  List<String> resumeIdList,
                                   String apiKey,
                                   boolean useSiliconFlow) {
         AnalyzeTaskStatusDTO status = statusStore.get(filterTaskId);
@@ -119,19 +134,10 @@ public class ResumeFilterService {
 
         try {
             int index = 0;
-            for (TextDO textRow : rows) {
+            for (String businessResumeId : resumeIdList) {
                 index++;
-                if (textRow == null || textRow.getResumeId() == null || textRow.getResumeId().isBlank()) {
-                    failedCount++;
-                    appendError(errorBuilder, index, "缺少业务 resume_id");
-                    upsertErrorJson(task.getId(), textRow != null ? textRow.getResumeId() : null,
-                            "{\"error\":\"missing_resume_id\",\"message\":\"text 行缺少 resume_id\"}");
-                    updateProgress(status, successCount, failedCount, errorBuilder);
-                    continue;
-                }
-                String businessResumeId = textRow.getResumeId().trim();
                 try {
-                    JsonNode resumePayload = buildResumePayload(textRow);
+                    JsonNode resumePayload = buildResumePayloadFromResumeTable(businessResumeId);
                     JsonNode analysis = deepseekBaseService.jdHardFilterAnalyze(apiKey, jdText, resumePayload, useSiliconFlow);
                     boolean pass = computePassFromDimensions(analysis);
                     String analysisJson = objectMapper.writeValueAsString(analysis);
@@ -145,7 +151,7 @@ public class ResumeFilterService {
                 updateProgress(status, successCount, failedCount, errorBuilder);
             }
 
-            int total = rows.size();
+            int total = resumeIdList.size();
             if (successCount == total) {
                 status.setStatus(STATUS_SUCCESS);
             } else if (successCount == 0) {
@@ -176,16 +182,15 @@ public class ResumeFilterService {
         errorBuilder.append("index=").append(index).append(", error=").append(message != null ? message : "");
     }
 
-    private JsonNode buildResumePayload(TextDO textRow) {
-        ResumeDTO structured = resumeService.getResumeDetailByBusinessResumeId(textRow.getResumeId());
-        if (structured != null) {
-            return objectMapper.valueToTree(structured);
+    private JsonNode buildResumePayloadFromResumeTable(String businessResumeId) {
+        ResumeDTO structured = resumeService.getResumeDetailByBusinessResumeId(businessResumeId);
+        if (structured == null) {
+            throw new IllegalArgumentException("resume 表中不存在业务 resume_id: " + businessResumeId);
         }
         ObjectNode wrapper = objectMapper.createObjectNode();
-        wrapper.put("source", "raw_text_only");
-        wrapper.put("resume_id", textRow.getResumeId());
-        wrapper.put("file_name", textRow.getFileName() != null ? textRow.getFileName() : "");
-        wrapper.put("raw_text", textRow.getText() != null ? textRow.getText() : "");
+        wrapper.put("source", "structured_resume");
+        wrapper.put("resume_id", businessResumeId);
+        wrapper.set("resume", objectMapper.valueToTree(structured));
         return wrapper;
     }
 

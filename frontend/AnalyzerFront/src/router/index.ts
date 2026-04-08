@@ -20,11 +20,6 @@ const router = createRouter({
       redirect: '/workflow',
     },
     {
-      path: '/analyze',
-      name: 'analyze',
-      component: () => import('../views/AnalyzePage.vue'),
-    },
-    {
       path: '/history',
       name: 'history',
       component: HistoryPage,

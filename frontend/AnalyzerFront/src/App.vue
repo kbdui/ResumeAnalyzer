@@ -33,7 +33,6 @@ const activeMenuPath = computed(() => {
         class="nav-menu"
       >
         <el-menu-item index="/workflow">流程编排</el-menu-item>
-        <el-menu-item index="/analyze">最终评估</el-menu-item>
         <el-menu-item index="/history">历史记录</el-menu-item>
       </el-menu>
     </el-header>

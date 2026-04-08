@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 import {
   listAnalysisByTask,
+  queryExtractTask,
   queryAnalyzeTask,
   queryHardFilterTask,
   queryMatchTask,
@@ -63,10 +64,14 @@ export function useWorkflowRunner() {
     return new Promise((resolve) => window.setTimeout(resolve, ms))
   }
 
-  async function pollAnalyzeLike(taskRef: Ref<string>, statusRef: Ref<AnalyzeTaskStatus | null>, isHardFilter = false) {
+  async function pollTaskStatus(
+    taskRef: Ref<string>,
+    statusRef: Ref<AnalyzeTaskStatus | null>,
+    queryFn: (taskId: string) => Promise<AnalyzeTaskStatus>,
+  ) {
     if (!taskRef.value) return
     while (true) {
-      const status = isHardFilter ? await queryHardFilterTask(taskRef.value) : await queryAnalyzeTask(taskRef.value)
+      const status = await queryFn(taskRef.value)
       statusRef.value = status
       if (status.status === 'SUCCESS' || status.status === 'PARTIAL_SUCCESS') return
       if (status.status === 'FAILED') throw new Error(status.error || '任务执行失败')
@@ -107,7 +112,7 @@ export function useWorkflowRunner() {
     try {
       const extractResp = await submitExtractTask(taskId.value, Math.floor(extractBatchSize.value))
       extractTaskId.value = extractResp.analyzeTaskId
-      await pollAnalyzeLike(extractTaskId, extractStatus, false)
+      await pollTaskStatus(extractTaskId, extractStatus, queryExtractTask)
     } finally {
       runningExtract.value = false
     }
@@ -120,7 +125,7 @@ export function useWorkflowRunner() {
     try {
       const hardFilterResp = await submitHardFilterTask(taskId.value, { jdText: jdText.value.trim() })
       hardFilterTaskId.value = hardFilterResp.analyzeTaskId
-      await pollAnalyzeLike(hardFilterTaskId, hardFilterStatus, true)
+      await pollTaskStatus(hardFilterTaskId, hardFilterStatus, queryHardFilterTask)
     } finally {
       runningHardFilter.value = false
     }
@@ -148,7 +153,7 @@ export function useWorkflowRunner() {
     try {
       const analyzeResp = await submitAnalyzeTaskWithBatch(taskId.value, Math.floor(analyzeBatchSize.value))
       analyzeTaskId.value = analyzeResp.analyzeTaskId
-      await pollAnalyzeLike(analyzeTaskId, analyzeStatus, false)
+      await pollTaskStatus(analyzeTaskId, analyzeStatus, queryAnalyzeTask)
       analysisRows.value = await listAnalysisByTask(taskId.value)
     } finally {
       runningAnalyze.value = false

@@ -4,13 +4,24 @@ import { ElMessage } from 'element-plus'
 import { DataAnalysis, Search } from '@element-plus/icons-vue'
 import TaskSelector from '@/components/TaskSelector.vue'
 import JsonViewer from '@/components/JsonViewer.vue'
-import { listAnalysisByTask, queryMatchTask } from '@/api'
-import type { AnalysisItem, PythonTaskItem, PythonTaskResultPayload } from '@/api/types'
+import { listAnalysisByTask, listExtractedResumeByTask, listTaskResumeByTask, queryMatchTask } from '@/api'
+import type { AnalysisItem, ExtractedResumeItem, PythonTaskItem, PythonTaskResultPayload, TaskResumeItem } from '@/api/types'
 
 const taskId = ref('')
 const loading = ref(false)
 const matchResult = ref<PythonTaskResultPayload | null>(null)
 const analysisRows = ref<AnalysisItem[]>([])
+const extractedResumeRows = ref<ExtractedResumeItem[]>([])
+const taskResumeRows = ref<TaskResumeItem[]>([])
+const pageSize = 10
+const matchPage = ref(1)
+const extractedPage = ref(1)
+const hardFilterPage = ref(1)
+const analysisPage = ref(1)
+const resumeDetailDialogVisible = ref(false)
+const hardFilterDetailDialogVisible = ref(false)
+const selectedResumeDetail = ref<ExtractedResumeItem | null>(null)
+const selectedHardFilterDetail = ref<(TaskResumeItem & { parsed: Record<string, unknown> }) | null>(null)
 
 const matchItems = computed<PythonTaskItem[]>(() => matchResult.value?.result?.results?.items || [])
 const parsedAnalysisRows = computed(() =>
@@ -18,6 +29,56 @@ const parsedAnalysisRows = computed(() =>
     let parsed: Record<string, unknown> = {}
     try {
       parsed = JSON.parse(r.analysisJson) as Record<string, unknown>
+    } catch {
+      parsed = {}
+    }
+    return { ...r, parsed }
+  }),
+)
+const pagedMatchItems = computed(() => {
+  const start = (matchPage.value - 1) * pageSize
+  return matchItems.value.slice(start, start + pageSize)
+})
+const pagedExtractedResumeRows = computed(() => {
+  const start = (extractedPage.value - 1) * pageSize
+  return extractedResumeRows.value.slice(start, start + pageSize)
+})
+const pagedTaskResumeRows = computed(() => {
+  const start = (hardFilterPage.value - 1) * pageSize
+  return parsedTaskResumeRows.value.slice(start, start + pageSize)
+})
+const pagedAnalysisRows = computed(() => {
+  const start = (analysisPage.value - 1) * pageSize
+  return parsedAnalysisRows.value.slice(start, start + pageSize)
+})
+
+function formatScore(value?: number | null) {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return '-'
+  }
+  return value.toFixed(3)
+}
+
+function openResumeDetail(row: ExtractedResumeItem) {
+  selectedResumeDetail.value = row
+  resumeDetailDialogVisible.value = true
+}
+
+function openHardFilterDetail(row: TaskResumeItem & { parsed: Record<string, unknown> }) {
+  selectedHardFilterDetail.value = row
+  hardFilterDetailDialogVisible.value = true
+}
+
+function getDimValue(key: string, field: string) {
+  const parsed = selectedHardFilterDetail.value?.parsed as Record<string, any> | undefined
+  const dim = parsed?.[key] as Record<string, any> | undefined
+  return dim?.[field]
+}
+const parsedTaskResumeRows = computed(() =>
+  taskResumeRows.value.map((r) => {
+    let parsed: Record<string, unknown> = {}
+    try {
+      parsed = r.analysisJson ? (JSON.parse(r.analysisJson) as Record<string, unknown>) : {}
     } catch {
       parsed = {}
     }
@@ -44,6 +105,22 @@ async function queryHistory() {
     analysisRows.value = []
     errors.push(`大模型评估结果查询失败：${(error as Error).message}`)
   }
+  try {
+    extractedResumeRows.value = await listExtractedResumeByTask(taskId.value)
+  } catch (error) {
+    extractedResumeRows.value = []
+    errors.push(`结构化简历信息查询失败：${(error as Error).message}`)
+  }
+  try {
+    taskResumeRows.value = await listTaskResumeByTask(taskId.value)
+  } catch (error) {
+    taskResumeRows.value = []
+    errors.push(`硬过滤结果查询失败：${(error as Error).message}`)
+  }
+  matchPage.value = 1
+  extractedPage.value = 1
+  hardFilterPage.value = 1
+  analysisPage.value = 1
   loading.value = false
   if (errors.length > 0) {
     ElMessage.warning(errors[0]!)
@@ -70,18 +147,102 @@ async function queryHistory() {
     </el-card>
 
     <el-card class="panel-card">
+      <template #header><span>结构化简历信息（resume）</span></template>
+      <el-table :data="pagedExtractedResumeRows" stripe max-height="360">
+        <el-table-column type="index" width="60" />
+        <el-table-column prop="resume_id" label="简历ID" min-width="180" />
+        <el-table-column label="姓名" width="140">
+          <template #default="{ row }">{{ row.personal_info?.name || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="联系方式" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.personal_info?.contact || row.personal_info?.email || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="技能数" width="100">
+          <template #default="{ row }">{{ row.skills?.length || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="工作经历数" width="110">
+          <template #default="{ row }">{{ row.work_experience?.length || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="详情" width="90" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" text @click="openResumeDetail(row)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        class="pager"
+        background
+        layout="prev, pager, next, total"
+        :page-size="pageSize"
+        :total="extractedResumeRows.length"
+        :current-page="extractedPage"
+        @current-change="(v: number) => (extractedPage = v)"
+      />
+    </el-card>
+
+    <el-card class="panel-card">
+      <template #header><span>硬过滤结果（task_resume）</span></template>
+      <el-table :data="pagedTaskResumeRows" stripe max-height="360">
+        <el-table-column type="index" width="60" />
+        <el-table-column prop="resumeId" label="简历ID" min-width="180" />
+        <el-table-column label="是否通过" width="120">
+          <template #default="{ row }">
+            <el-tag :type="row.pass ? 'success' : 'danger'" effect="light">{{ row.pass ? 'PASS' : 'FAIL' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="教育" width="120">
+          <template #default="{ row }">{{ row.parsed.education?.status || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="工作经验" width="120">
+          <template #default="{ row }">{{ row.parsed.work_experience?.status || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="技能" width="100">
+          <template #default="{ row }">{{ row.parsed.skills?.status || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="项目" width="100">
+          <template #default="{ row }">{{ row.parsed.projects?.status || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="详情" width="90" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" text @click="openHardFilterDetail(row)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        class="pager"
+        background
+        layout="prev, pager, next, total"
+        :page-size="pageSize"
+        :total="parsedTaskResumeRows.length"
+        :current-page="hardFilterPage"
+        @current-change="(v: number) => (hardFilterPage = v)"
+      />
+    </el-card>
+
+    <el-card class="panel-card">
       <template #header><span>召回筛选结果</span></template>
-      <el-table :data="matchItems" stripe max-height="360">
+      <el-table :data="pagedMatchItems" stripe max-height="360">
         <el-table-column type="index" width="60" />
         <el-table-column prop="resume_id" label="简历ID" min-width="180" />
         <el-table-column prop="file_name" label="文件名" min-width="180" />
-        <el-table-column prop="final_score" label="综合分" width="120" />
+        <el-table-column prop="final_score" label="综合分" width="120">
+          <template #default="{ row }">{{ formatScore(row.final_score) }}</template>
+        </el-table-column>
       </el-table>
+      <el-pagination
+        class="pager"
+        background
+        layout="prev, pager, next, total"
+        :page-size="pageSize"
+        :total="matchItems.length"
+        :current-page="matchPage"
+        @current-change="(v: number) => (matchPage = v)"
+      />
     </el-card>
 
     <el-card class="panel-card">
       <template #header><span>大模型评估结果</span></template>
-      <el-table :data="parsedAnalysisRows" stripe max-height="360">
+      <el-table :data="pagedAnalysisRows" stripe max-height="360">
         <el-table-column prop="resumeId" label="简历ID" min-width="180" />
         <el-table-column label="等级" width="160">
           <template #default="{ row }">{{ row.parsed.overall_level || '-' }}</template>
@@ -93,6 +254,15 @@ async function queryHistory() {
           <template #default="{ row }">{{ row.parsed.summary || '-' }}</template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        class="pager"
+        background
+        layout="prev, pager, next, total"
+        :page-size="pageSize"
+        :total="parsedAnalysisRows.length"
+        :current-page="analysisPage"
+        @current-change="(v: number) => (analysisPage = v)"
+      />
     </el-card>
 
     <el-row :gutter="16">
@@ -100,9 +270,84 @@ async function queryHistory() {
         <el-card class="panel-card"><template #header><span>召回结果 JSON</span></template><JsonViewer :data="matchResult" /></el-card>
       </el-col>
       <el-col :span="12">
+        <el-card class="panel-card"><template #header><span>结构化简历 JSON</span></template><JsonViewer :data="extractedResumeRows" /></el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="16">
+      <el-col :span="12">
+        <el-card class="panel-card"><template #header><span>硬过滤 JSON</span></template><JsonViewer :data="taskResumeRows" /></el-card>
+      </el-col>
+      <el-col :span="12">
         <el-card class="panel-card"><template #header><span>评估结果 JSON</span></template><JsonViewer :data="analysisRows" /></el-card>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="resumeDetailDialogVisible" title="结构化简历详情" width="760px">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="简历ID">{{ selectedResumeDetail?.resume_id || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="姓名">{{ selectedResumeDetail?.personal_info?.name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="联系方式">
+          {{ selectedResumeDetail?.personal_info?.contact || selectedResumeDetail?.personal_info?.email || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="技能">
+          {{ selectedResumeDetail?.skills?.join('、') || '-' }}
+        </el-descriptions-item>
+      </el-descriptions>
+      <el-divider>工作经历</el-divider>
+      <el-timeline v-if="selectedResumeDetail?.work_experience?.length">
+        <el-timeline-item
+          v-for="(work, idx) in selectedResumeDetail.work_experience"
+          :key="idx"
+          :timestamp="work.duration || '-'"
+        >
+          <div><strong>{{ work.company || '-' }}</strong> / {{ work.position || '-' }}</div>
+          <div class="muted">{{ work.description || '-' }}</div>
+        </el-timeline-item>
+      </el-timeline>
+      <el-empty v-else description="暂无工作经历" />
+    </el-dialog>
+
+    <el-dialog v-model="hardFilterDetailDialogVisible" title="硬过滤分析详情" width="780px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="简历ID">{{ selectedHardFilterDetail?.resumeId || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="是否通过">
+          <el-tag :type="selectedHardFilterDetail?.pass ? 'success' : 'danger'">
+            {{ selectedHardFilterDetail?.pass ? 'PASS' : 'FAIL' }}
+          </el-tag>
+        </el-descriptions-item>
+      </el-descriptions>
+      <el-divider />
+      <el-table
+        :data="[
+          { key: 'education', label: '教育背景' },
+          { key: 'work_experience', label: '工作经验' },
+          { key: 'skills', label: '技能' },
+          { key: 'projects', label: '项目经验' },
+        ]"
+        border
+      >
+        <el-table-column prop="label" label="维度" width="120" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">{{ getDimValue(row.key, 'status') || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="置信度" width="100">
+          <template #default="{ row }">{{ getDimValue(row.key, 'confidence') ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column label="分析理由" min-width="280" show-overflow-tooltip>
+          <template #default="{ row }">{{ getDimValue(row.key, 'reason') || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="证据" min-width="260" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{
+              Array.isArray(getDimValue(row.key, 'evidence'))
+                ? getDimValue(row.key, 'evidence').join('；')
+                : '-'
+            }}
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -110,5 +355,7 @@ async function queryHistory() {
 .history-page { display: flex; flex-direction: column; gap: 20px; }
 .header-left { display: flex; align-items: center; gap: 8px; }
 .mt12 { margin-top: 12px; }
+.pager { margin-top: 12px; justify-content: flex-end; }
+.muted { color: #606266; margin-top: 4px; }
 </style>
 

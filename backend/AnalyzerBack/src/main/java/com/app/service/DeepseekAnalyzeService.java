@@ -47,6 +47,7 @@ public class DeepseekAnalyzeService {
     private final AnalysisDAO analysisDAO;
     private final DeepseekBaseService deepseekBaseService;
     private final ObjectMapper objectMapper;
+    private final int maxBatchSize;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private final ExecutorService llmExecutor;
@@ -59,13 +60,15 @@ public class DeepseekAnalyzeService {
                                   DeepseekBaseService deepseekBaseService,
                                   ObjectMapper objectMapper,
                                   @Value("${deepseek.analyze.llm.executor-threads:5}") int llmThreads,
-                                  @Value("${deepseek.analyze.llm.queue-capacity:200}") int llmQueueCapacity) {
+                                  @Value("${deepseek.analyze.llm.queue-capacity:200}") int llmQueueCapacity,
+                                  @Value("${deepseek.analyze.batch.max-size:20}") int maxBatchSize) {
         this.taskService = taskService;
         this.hybridResultService = hybridResultService;
         this.jdExtractService = jdExtractService;
         this.analysisDAO = analysisDAO;
         this.deepseekBaseService = deepseekBaseService;
         this.objectMapper = objectMapper;
+        this.maxBatchSize = Math.max(1, maxBatchSize);
         int normalizedThreads = Math.max(1, llmThreads);
         int normalizedQueue = Math.max(1, llmQueueCapacity);
         this.llmExecutor = new ThreadPoolExecutor(
@@ -106,6 +109,11 @@ public class DeepseekAnalyzeService {
             throw new IllegalArgumentException("hybrid_result 中未找到可分析的 items");
         }
 
+        int parallelBatchSize = (batchSize == null || batchSize < 1) ? DEFAULT_BATCH_SIZE : batchSize;
+        if (parallelBatchSize > maxBatchSize) {
+            throw new IllegalArgumentException("batchSize 不能大于 " + maxBatchSize + "，当前: " + parallelBatchSize);
+        }
+
         String analyzeTaskId = UUID.randomUUID().toString();
         AnalyzeTaskStatusDTO status = new AnalyzeTaskStatusDTO();
         status.setAnalyzeTaskId(analyzeTaskId);
@@ -116,7 +124,6 @@ public class DeepseekAnalyzeService {
         status.setFailedCount(0);
         statusStore.put(analyzeTaskId, status);
 
-        int parallelBatchSize = (batchSize == null || batchSize < 1) ? DEFAULT_BATCH_SIZE : batchSize;
         executor.submit(() -> runAnalyzeJob(
                 analyzeTaskId,
                 task,

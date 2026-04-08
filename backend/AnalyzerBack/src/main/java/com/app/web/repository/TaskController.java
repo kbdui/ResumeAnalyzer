@@ -1,4 +1,4 @@
-package com.app.web;
+package com.app.web.repository;
 
 import com.app.entity.TaskDO;
 import com.app.service.repository.TaskService;
@@ -42,3 +42,4 @@ public class TaskController {
         return ApiResponse.success(taskService.listAll());
     }
 }
+

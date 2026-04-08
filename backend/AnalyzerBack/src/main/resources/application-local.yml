@@ -33,10 +33,14 @@ deepseek:
       chat: deepseek-chat
       reasoner: deepseek-reasoner   # useSiliconFlow 时使用
   extract:
+    batch:
+      max-size: 20
     llm:
       executor-threads: 5
       queue-capacity: 200
   analyze:
+    batch:
+      max-size: 20
     llm:
       executor-threads: 5
       queue-capacity: 200

@@ -58,6 +58,44 @@ export interface AnalysisItem {
   updateTime: string
 }
 
+export interface ExtractedResumeItem {
+  resume_id?: string
+  personal_info?: {
+    name?: string
+    contact?: string
+    email?: string
+  }
+  education?: Array<{
+    school?: string
+    major?: string
+    degree?: string
+    graduationYear?: string
+  }>
+  work_experience?: Array<{
+    company?: string
+    position?: string
+    duration?: string
+    description?: string
+  }>
+  skills?: string[]
+  projects?: Array<{
+    name?: string
+    description?: string
+    technologies?: string[]
+  }>
+  certificates?: string[]
+}
+
+export interface TaskResumeItem {
+  id: number
+  taskId: number
+  resumeId: string
+  pass: boolean
+  analysisJson?: string | null
+  createTime?: string
+  updateTime?: string
+}
+
 export interface AnalyzeSubmitResponse {
   analyzeTaskId: string
   taskId: string
