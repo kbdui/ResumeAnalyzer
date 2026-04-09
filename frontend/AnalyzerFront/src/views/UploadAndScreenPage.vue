@@ -23,6 +23,7 @@ const {
   runningHardFilter,
   runningHybrid,
   runningAnalyze,
+  runningAnyStep,
   extractTaskId,
   hardFilterTaskId,
   analyzeTaskId,
@@ -109,6 +110,14 @@ function formatScore(value?: number | null) {
   }
   return value.toFixed(3)
 }
+
+function formatMaybeScore(value: unknown) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) {
+    return '-'
+  }
+  return n.toFixed(3)
+}
 </script>
 
 <template>
@@ -122,6 +131,7 @@ function formatScore(value?: number | null) {
           :task-id="taskId"
           :jd-text="jdText"
           :running-pipeline="runningPipeline"
+          :running-any-step="runningAnyStep"
           @update:task-id="setTaskId"
           @update:jd-text="setJdText"
           @run-all="onRunAll"
@@ -136,6 +146,7 @@ function formatScore(value?: number | null) {
           :current-task-id="taskId"
           :batch-size="extractBatchSize"
           :running="runningExtract"
+          :action-disabled="runningAnyStep"
           :task-ref-id="extractTaskId"
           :status-data="extractStatus"
           @update:batch-size="setExtractBatchSize"
@@ -146,6 +157,7 @@ function formatScore(value?: number | null) {
         <StepHardFilterPanel
           :current-task-id="taskId"
           :running="runningHardFilter"
+          :action-disabled="runningAnyStep"
           :task-ref-id="hardFilterTaskId"
           :status-data="hardFilterStatus"
           @run="runStep(runHardFilterStep, '硬过滤完成')"
@@ -160,6 +172,7 @@ function formatScore(value?: number | null) {
           :top-k="topK"
           :recall-k="recallK"
           :running="runningHybrid"
+          :action-disabled="runningAnyStep"
           :result-data="matchResult"
           @update:top-k="setTopK"
           @update:recall-k="setRecallK"
@@ -171,6 +184,7 @@ function formatScore(value?: number | null) {
           :current-task-id="taskId"
           :batch-size="analyzeBatchSize"
           :running="runningAnalyze"
+          :action-disabled="runningAnyStep"
           :task-ref-id="analyzeTaskId"
           :status-data="analyzeStatus"
           @update:batch-size="setAnalyzeBatchSize"
@@ -203,7 +217,7 @@ function formatScore(value?: number | null) {
           <template #default="{ row }">{{ row.parsed.overall_level || '-' }}</template>
         </el-table-column>
         <el-table-column label="评分" width="120">
-          <template #default="{ row }">{{ row.parsed.overall_score ?? '-' }}</template>
+          <template #default="{ row }">{{ formatMaybeScore(row.parsed.overall_score) }}</template>
         </el-table-column>
         <el-table-column label="总结" min-width="360" show-overflow-tooltip>
           <template #default="{ row }">{{ row.parsed.summary || '-' }}</template>

@@ -59,6 +59,14 @@ function formatScore(value?: number | null) {
   return value.toFixed(3)
 }
 
+function formatMaybeScore(value: unknown) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) {
+    return '-'
+  }
+  return n.toFixed(3)
+}
+
 function openResumeDetail(row: ExtractedResumeItem) {
   selectedResumeDetail.value = row
   resumeDetailDialogVisible.value = true
@@ -248,7 +256,7 @@ async function queryHistory() {
           <template #default="{ row }">{{ row.parsed.overall_level || '-' }}</template>
         </el-table-column>
         <el-table-column label="分数" width="120">
-          <template #default="{ row }">{{ row.parsed.overall_score ?? '-' }}</template>
+          <template #default="{ row }">{{ formatMaybeScore(row.parsed.overall_score) }}</template>
         </el-table-column>
         <el-table-column label="总结" min-width="420" show-overflow-tooltip>
           <template #default="{ row }">{{ row.parsed.summary || '-' }}</template>

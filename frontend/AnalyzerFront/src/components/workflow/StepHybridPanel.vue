@@ -9,6 +9,7 @@ const props = defineProps<{
   topK: number
   recallK: number
   running: boolean
+  actionDisabled: boolean
   resultData?: PythonTaskResultPayload | null
 }>()
 
@@ -68,7 +69,9 @@ const summaryText = computed(() => {
       </el-col>
     </el-row>
     <el-space wrap>
-      <el-button type="primary" :loading="props.running" @click="emit('run')">执行 Step 4</el-button>
+      <el-button type="primary" :loading="props.running" :disabled="props.actionDisabled" @click="emit('run')">
+        执行 Step 4
+      </el-button>
       <el-button v-if="props.resultData" @click="showDialog = true">查看详情</el-button>
     </el-space>
   </WorkflowStepCard>

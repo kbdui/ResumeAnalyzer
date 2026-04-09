@@ -28,6 +28,14 @@ export function useWorkflowRunner() {
   const runningHardFilter = ref(false)
   const runningHybrid = ref(false)
   const runningAnalyze = ref(false)
+  const runningAnyStep = computed(
+    () =>
+      runningPipeline.value ||
+      runningExtract.value ||
+      runningHardFilter.value ||
+      runningHybrid.value ||
+      runningAnalyze.value,
+  )
 
   const extractTaskId = ref('')
   const hardFilterTaskId = ref('')
@@ -62,6 +70,12 @@ export function useWorkflowRunner() {
 
   function sleep(ms: number) {
     return new Promise((resolve) => window.setTimeout(resolve, ms))
+  }
+
+  function ensureNoConcurrentStep() {
+    if (runningAnyStep.value) {
+      throw new Error('已有步骤正在执行，请等待完成后再操作')
+    }
   }
 
   async function pollTaskStatus(
@@ -106,7 +120,7 @@ export function useWorkflowRunner() {
     analysisRows.value = await listAnalysisByTask(taskId.value)
   }
 
-  async function runExtractStep() {
+  async function runExtractStepCore() {
     if (!taskId.value) throw new Error('请先选择 task')
     runningExtract.value = true
     try {
@@ -118,7 +132,7 @@ export function useWorkflowRunner() {
     }
   }
 
-  async function runHardFilterStep() {
+  async function runHardFilterStepCore() {
     if (!taskId.value) throw new Error('请先选择 task')
     if (!jdText.value.trim()) throw new Error('请输入岗位 JD 文本')
     runningHardFilter.value = true
@@ -131,7 +145,7 @@ export function useWorkflowRunner() {
     }
   }
 
-  async function runHybridStep() {
+  async function runHybridStepCore() {
     ensureRunParams()
     runningHybrid.value = true
     try {
@@ -147,7 +161,7 @@ export function useWorkflowRunner() {
     }
   }
 
-  async function runAnalyzeStep() {
+  async function runAnalyzeStepCore() {
     if (!taskId.value) throw new Error('请先选择 task')
     runningAnalyze.value = true
     try {
@@ -160,14 +174,35 @@ export function useWorkflowRunner() {
     }
   }
 
+  async function runExtractStep() {
+    ensureNoConcurrentStep()
+    await runExtractStepCore()
+  }
+
+  async function runHardFilterStep() {
+    ensureNoConcurrentStep()
+    await runHardFilterStepCore()
+  }
+
+  async function runHybridStep() {
+    ensureNoConcurrentStep()
+    await runHybridStepCore()
+  }
+
+  async function runAnalyzeStep() {
+    ensureNoConcurrentStep()
+    await runAnalyzeStepCore()
+  }
+
   async function runFullPipeline() {
+    ensureNoConcurrentStep()
     ensureRunParams()
     runningPipeline.value = true
     try {
-      await runExtractStep()
-      await runHardFilterStep()
-      await runHybridStep()
-      await runAnalyzeStep()
+      await runExtractStepCore()
+      await runHardFilterStepCore()
+      await runHybridStepCore()
+      await runAnalyzeStepCore()
       await refreshFinalOutputs()
     } finally {
       runningPipeline.value = false
@@ -188,6 +223,7 @@ export function useWorkflowRunner() {
     runningHardFilter,
     runningHybrid,
     runningAnalyze,
+    runningAnyStep,
     extractTaskId,
     hardFilterTaskId,
     analyzeTaskId,

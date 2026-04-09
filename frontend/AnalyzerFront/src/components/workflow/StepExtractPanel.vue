@@ -8,6 +8,7 @@ const props = defineProps<{
   currentTaskId?: string
   batchSize: number
   running: boolean
+  actionDisabled: boolean
   taskRefId?: string
   statusData?: AnalyzeTaskStatus | null
 }>()
@@ -59,7 +60,9 @@ const progress = computed(() => {
       />
     </div>
     <el-space wrap>
-      <el-button type="primary" :loading="props.running" @click="emit('run')">执行 Step 2</el-button>
+      <el-button type="primary" :loading="props.running" :disabled="props.actionDisabled" @click="emit('run')">
+        执行 Step 2
+      </el-button>
       <el-button v-if="props.statusData" @click="showDialog = true">查看详情</el-button>
     </el-space>
   </WorkflowStepCard>

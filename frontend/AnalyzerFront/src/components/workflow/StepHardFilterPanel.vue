@@ -7,6 +7,7 @@ import WorkflowStepCard from './WorkflowStepCard.vue'
 const props = defineProps<{
   currentTaskId?: string
   running: boolean
+  actionDisabled: boolean
   taskRefId?: string
   statusData?: AnalyzeTaskStatus | null
 }>()
@@ -49,7 +50,9 @@ const progress = computed(() => {
     />
     <el-text type="info">本步骤使用流程上下文中的 JD 文本</el-text>
     <el-space wrap>
-      <el-button type="primary" :loading="props.running" @click="emit('run')">执行 Step 3</el-button>
+      <el-button type="primary" :loading="props.running" :disabled="props.actionDisabled" @click="emit('run')">
+        执行 Step 3
+      </el-button>
       <el-button v-if="props.statusData" @click="showDialog = true">查看详情</el-button>
     </el-space>
   </WorkflowStepCard>

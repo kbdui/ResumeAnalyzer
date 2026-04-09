@@ -6,6 +6,7 @@ const props = defineProps<{
   taskId: string
   jdText: string
   runningPipeline: boolean
+  runningAnyStep: boolean
 }>()
 
 const emit = defineEmits<{
@@ -25,7 +26,12 @@ const emit = defineEmits<{
           <span class="panel-title">流程上下文</span>
         </div>
         <el-space>
-          <el-button type="primary" :loading="props.runningPipeline" @click="emit('run-all')">
+          <el-button
+            type="primary"
+            :loading="props.runningPipeline"
+            :disabled="props.runningAnyStep && !props.runningPipeline"
+            @click="emit('run-all')"
+          >
             <el-icon v-if="props.runningPipeline"><Loading class="is-loading" /></el-icon>
             一键执行 Step2-5
           </el-button>

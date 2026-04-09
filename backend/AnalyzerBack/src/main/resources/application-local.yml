@@ -28,7 +28,12 @@ deepseek:
   client:
     api-url: https://api.deepseek.com/v1/chat/completions
     connect-timeout: 30   # 连接超时（秒）
-    read-timeout: 60     # 读取超时（秒）
+    read-timeout: 120     # 读取超时（秒）
+    write-timeout: 30     # 写入超时（秒）
+    call-timeout: 180     # 单次请求总超时（秒）
+    retry: 3              # 最大重试次数（不含首次请求）
+    retry-backoff-ms: 1000
+    retry-max-backoff-ms: 8000
     model:
       chat: deepseek-chat
       reasoner: deepseek-reasoner   # useSiliconFlow 时使用
