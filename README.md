@@ -21,6 +21,7 @@
 
 ## 系统流程
 
+```
 Upload
   ↓
 Extract (LLM)
@@ -32,6 +33,7 @@ Recall (TF-IDF + Embedding)
 LLM Evaluation
   ↓
 Frontend Display
+```
 
 ## 技术架构
 
