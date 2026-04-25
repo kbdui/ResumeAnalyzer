@@ -1,4 +1,4 @@
-import { get, post } from './http'
+import { del, get, post } from './http'
 import type {
   AnalysisItem,
   AnalyzeSubmitResponse,
@@ -18,6 +18,10 @@ export function uploadZip(file: File) {
 
 export function listTasks() {
   return get<TaskItem[]>('/task/list')
+}
+
+export function deleteTask(taskId: string) {
+  return del<boolean>(`/task/${taskId}`)
 }
 
 export function submitMatchTask(payload: {
@@ -41,8 +45,8 @@ export function queryExtractTask(extractTaskId: string) {
   return get<AnalyzeTaskStatus>(`/deepseek/extract/${extractTaskId}`)
 }
 
-export function submitHardFilterTask(taskId: string, payload: { jdText: string }) {
-  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/hard-filter`, payload)
+export function submitHardFilterTask(taskId: string, payload: { jdText: string }, batchSize = 5) {
+  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/hard-filter?batchSize=${batchSize}`, payload)
 }
 
 export function queryHardFilterTask(hardFilterTaskId: string) {

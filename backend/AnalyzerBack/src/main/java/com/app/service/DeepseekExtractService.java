@@ -9,6 +9,8 @@ import com.app.entity.TextDO;
 import com.app.service.repository.ResumeService;
 import com.app.service.repository.TaskService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +31,10 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class DeepseekExtractService {
 
+    private static final Logger log = LoggerFactory.getLogger(DeepseekExtractService.class);
+    private static final Logger perfLog = LoggerFactory.getLogger("PERF_METRIC");
+    private static final int[] PERF_CHECKPOINTS = {20, 50, 100, 200};
+
     private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_RUNNING = "RUNNING";
     private static final String STATUS_SUCCESS = "SUCCESS";
@@ -40,6 +46,7 @@ public class DeepseekExtractService {
     private final DeepseekBaseService deepseekBaseService;
     private final ResumeService resumeService;
     private final TextDAO textDAO;
+    private final int llmThreads;
     private final int llmQueueCapacity;
     private final int maxBatchSize;
 
@@ -59,6 +66,7 @@ public class DeepseekExtractService {
         this.resumeService = resumeService;
         this.textDAO = textDAO;
         int normalizedThreads = Math.max(1, llmThreads);
+        this.llmThreads = normalizedThreads;
         this.llmQueueCapacity = Math.max(1, llmQueueCapacity);
         this.maxBatchSize = Math.max(1, maxBatchSize);
         this.llmExecutor = new ThreadPoolExecutor(
@@ -167,15 +175,29 @@ public class DeepseekExtractService {
         if (status == null) {
             return;
         }
+        long startedAtMs = System.currentTimeMillis();
         status.setStatus(STATUS_RUNNING);
-        status.setStartedAtMs(System.currentTimeMillis());
+        status.setStartedAtMs(startedAtMs);
 
         int successCount = 0;
         int failedCount = 0;
         StringBuilder errorBuilder = new StringBuilder();
+        int total = items.size();
+        int effectiveParallelism = Math.max(1, Math.min(llmThreads, batchSize));
+        boolean[] checkpointLogged = new boolean[PERF_CHECKPOINTS.length];
+
+        perfLog.info(
+                "PERF_EXTRACT_START businessTaskId={} analyzeTaskId={} total={} llmThreads={} batchSize={} effectiveParallelism={} queueCapacity={}",
+                status.getTaskId(),
+                analyzeTaskId,
+                total,
+                llmThreads,
+                batchSize,
+                effectiveParallelism,
+                llmQueueCapacity
+        );
 
         try {
-            int total = items.size();
             for (int start = 0; start < total; start += batchSize) {
                 int end = Math.min(total, start + batchSize);
                 // CompletableFuture意为这条异步任务未来会给你一个结果
@@ -206,6 +228,20 @@ public class DeepseekExtractService {
                     status.setSuccessCount(successCount);
                     status.setFailedCount(failedCount);
                     status.setError(String.valueOf(errorBuilder));
+                    logCheckpointIfNeeded(
+                            "PERF_EXTRACT_CHECKPOINT",
+                            status.getTaskId(),
+                            analyzeTaskId,
+                            startedAtMs,
+                            total,
+                            successCount,
+                            failedCount,
+                            llmThreads,
+                            batchSize,
+                            effectiveParallelism,
+                            llmQueueCapacity,
+                            checkpointLogged
+                    );
                 }
             }
             if (successCount == total) {
@@ -221,7 +257,27 @@ public class DeepseekExtractService {
             status.setSuccessCount(successCount);
             status.setFailedCount(failedCount);
         } finally {
-            status.setEndedAtMs(System.currentTimeMillis());
+            long endedAtMs = System.currentTimeMillis();
+            long elapsedMs = Math.max(0L, endedAtMs - startedAtMs);
+            int processedCount = successCount + failedCount;
+            status.setEndedAtMs(endedAtMs);
+            perfLog.info(
+                    "PERF_EXTRACT_SUMMARY businessTaskId={} analyzeTaskId={} status={} total={} processed={} success={} failed={} llmThreads={} batchSize={} effectiveParallelism={} queueCapacity={} elapsedMs={} avgMsPerResume={} throughputPerMin={}",
+                    status.getTaskId(),
+                    analyzeTaskId,
+                    status.getStatus(),
+                    total,
+                    processedCount,
+                    successCount,
+                    failedCount,
+                    llmThreads,
+                    batchSize,
+                    effectiveParallelism,
+                    llmQueueCapacity,
+                    elapsedMs,
+                    formatDecimal(processedCount == 0 ? 0D : (double) elapsedMs / processedCount),
+                    formatDecimal(elapsedMs == 0 ? 0D : processedCount * 60000D / elapsedMs)
+            );
         }
     }
 
@@ -263,6 +319,51 @@ public class DeepseekExtractService {
 
         static ExtractItemResult failed(int rankNo, String error) {
             return new ExtractItemResult(rankNo, false, error);
+        }
+    }
+
+    private static String formatDecimal(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
+    }
+
+    private void logCheckpointIfNeeded(String eventName,
+                                       String businessTaskId,
+                                       String analyzeTaskId,
+                                       long startedAtMs,
+                                       int total,
+                                       int successCount,
+                                       int failedCount,
+                                       int llmThreads,
+                                       int batchSize,
+                                       int effectiveParallelism,
+                                       int queueCapacity,
+                                       boolean[] checkpointLogged) {
+        int processedCount = successCount + failedCount;
+        long now = System.currentTimeMillis();
+        long elapsedMs = Math.max(0L, now - startedAtMs);
+        for (int i = 0; i < PERF_CHECKPOINTS.length; i++) {
+            int checkpoint = PERF_CHECKPOINTS[i];
+            if (!checkpointLogged[i] && processedCount >= checkpoint) {
+                checkpointLogged[i] = true;
+                perfLog.info(
+                        "{} businessTaskId={} analyzeTaskId={} checkpoint={} total={} processed={} success={} failed={} llmThreads={} batchSize={} effectiveParallelism={} queueCapacity={} elapsedMs={} avgMsPerResume={} throughputPerMin={}",
+                        eventName,
+                        businessTaskId,
+                        analyzeTaskId,
+                        checkpoint,
+                        total,
+                        processedCount,
+                        successCount,
+                        failedCount,
+                        llmThreads,
+                        batchSize,
+                        effectiveParallelism,
+                        queueCapacity,
+                        elapsedMs,
+                        formatDecimal(processedCount == 0 ? 0D : (double) elapsedMs / processedCount),
+                        formatDecimal(elapsedMs == 0 ? 0D : processedCount * 60000D / elapsedMs)
+                );
+            }
         }
     }
 

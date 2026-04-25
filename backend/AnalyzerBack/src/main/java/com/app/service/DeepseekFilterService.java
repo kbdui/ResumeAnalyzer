@@ -10,6 +10,9 @@ import com.app.entity.TextDO;
 import com.app.service.repository.ResumeService;
 import com.app.service.repository.TaskService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -22,16 +25,25 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 按 JD 对 task 下简历异步批量调用大模型做三态硬过滤，结果写入 task_resume。
  */
 @Service
 public class DeepseekFilterService {
+
+    private static final Logger log = LoggerFactory.getLogger(DeepseekFilterService.class);
+    private static final Logger perfLog = LoggerFactory.getLogger("PERF_METRIC");
+    private static final int[] PERF_CHECKPOINTS = {20, 50, 100, 200};
+    private static final int DEFAULT_BATCH_SIZE = 5;
 
     private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_RUNNING = "RUNNING";
@@ -47,8 +59,12 @@ public class DeepseekFilterService {
     private final TaskResumeDAO taskResumeDAO;
     private final DeepseekBaseService deepseekBaseService;
     private final ObjectMapper objectMapper;
+    private final int llmThreads;
+    private final int llmQueueCapacity;
+    private final int maxBatchSize;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
+    private final ExecutorService llmExecutor;
     private final ConcurrentMap<String, AnalyzeTaskStatusDTO> statusStore = new ConcurrentHashMap<>();
 
     public DeepseekFilterService(TaskService taskService,
@@ -56,19 +72,38 @@ public class DeepseekFilterService {
                                  ResumeService resumeService,
                                  TaskResumeDAO taskResumeDAO,
                                  DeepseekBaseService deepseekBaseService,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper,
+                                 @Value("${deepseek.filter.llm.executor-threads:5}") int llmThreads,
+                                 @Value("${deepseek.filter.llm.queue-capacity:200}") int llmQueueCapacity,
+                                 @Value("${deepseek.filter.batch.max-size:20}") int maxBatchSize) {
         this.taskService = taskService;
         this.textDAO = textDAO;
         this.resumeService = resumeService;
         this.taskResumeDAO = taskResumeDAO;
         this.deepseekBaseService = deepseekBaseService;
         this.objectMapper = objectMapper;
+        int normalizedThreads = Math.max(1, llmThreads);
+        this.llmThreads = normalizedThreads;
+        this.llmQueueCapacity = Math.max(1, llmQueueCapacity);
+        this.maxBatchSize = Math.max(1, maxBatchSize);
+        this.llmExecutor = new ThreadPoolExecutor(
+                normalizedThreads,
+                normalizedThreads,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(this.llmQueueCapacity),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
     }
 
     /**
      * 提交异步硬过滤任务，供 GET /deepseek/hard-filter/{id} 轮询。
      */
-    public String submitHardFilterTask(String businessTaskId, String jdText, String apiKey, boolean useSiliconFlow) {
+    public String submitHardFilterTask(String businessTaskId,
+                                       String jdText,
+                                       String apiKey,
+                                       boolean useSiliconFlow,
+                                       Integer batchSize) {
         if (jdText == null || jdText.isBlank()) {
             throw new IllegalArgumentException("jdText 不能为空");
         }
@@ -95,6 +130,10 @@ public class DeepseekFilterService {
             throw new IllegalArgumentException("task 下缺少可过滤的业务 resume_id: " + businessTaskId);
         }
         List<String> resumeIdList = new ArrayList<>(businessResumeIds);
+        int parallelBatchSize = (batchSize == null || batchSize < 1) ? DEFAULT_BATCH_SIZE : batchSize;
+        if (parallelBatchSize > maxBatchSize) {
+            throw new IllegalArgumentException("batchSize 不能大于 " + maxBatchSize + "，当前: " + parallelBatchSize);
+        }
 
         String filterTaskId = UUID.randomUUID().toString();
         AnalyzeTaskStatusDTO status = new AnalyzeTaskStatusDTO();
@@ -107,7 +146,15 @@ public class DeepseekFilterService {
         statusStore.put(filterTaskId, status);
 
         String jd = jdText.trim();
-        executor.submit(() -> runHardFilterJob(filterTaskId, task, jd, resumeIdList, apiKey, useSiliconFlow));
+        executor.submit(() -> runHardFilterJob(
+                filterTaskId,
+                task,
+                jd,
+                resumeIdList,
+                apiKey,
+                useSiliconFlow,
+                parallelBatchSize
+        ));
         return filterTaskId;
     }
 
@@ -120,38 +167,72 @@ public class DeepseekFilterService {
                                   String jdText,
                                   List<String> resumeIdList,
                                   String apiKey,
-                                  boolean useSiliconFlow) {
+                                  boolean useSiliconFlow,
+                                  int batchSize) {
         AnalyzeTaskStatusDTO status = statusStore.get(filterTaskId);
         if (status == null) {
             return;
         }
+        long startedAtMs = System.currentTimeMillis();
         status.setStatus(STATUS_RUNNING);
-        status.setStartedAtMs(System.currentTimeMillis());
+        status.setStartedAtMs(startedAtMs);
 
         int successCount = 0;
         int failedCount = 0;
         StringBuilder errorBuilder = new StringBuilder();
+        int total = resumeIdList.size();
+        int effectiveParallelism = Math.max(1, Math.min(llmThreads, batchSize));
+        boolean[] checkpointLogged = new boolean[PERF_CHECKPOINTS.length];
+
+        perfLog.info(
+                "PERF_HARD_FILTER_START businessTaskId={} filterTaskId={} total={} llmThreads={} batchSize={} effectiveParallelism={} queueCapacity={}",
+                status.getTaskId(),
+                filterTaskId,
+                total,
+                llmThreads,
+                batchSize,
+                effectiveParallelism,
+                llmQueueCapacity
+        );
 
         try {
-            int index = 0;
-            for (String businessResumeId : resumeIdList) {
-                index++;
-                try {
-                    JsonNode resumePayload = buildResumePayloadFromResumeTable(businessResumeId);
-                    JsonNode analysis = deepseekBaseService.jdHardFilterAnalyze(apiKey, jdText, resumePayload, useSiliconFlow);
-                    boolean pass = computePassFromDimensions(analysis);
-                    String analysisJson = objectMapper.writeValueAsString(analysis);
-                    upsertResult(task.getId(), businessResumeId, pass, analysisJson);
-                    successCount++;
-                } catch (Exception e) {
-                    failedCount++;
-                    appendError(errorBuilder, index, e.getMessage());
-                    upsertResult(task.getId(), businessResumeId, false, toErrorJson(e));
+            for (int start = 0; start < total; start += effectiveParallelism) {
+                int end = Math.min(total, start + effectiveParallelism);
+                List<CompletableFuture<FilterItemResult>> futures = new ArrayList<>(end - start);
+                for (int i = start; i < end; i++) {
+                    final int index = i + 1;
+                    final String businessResumeId = resumeIdList.get(i);
+                    futures.add(CompletableFuture.supplyAsync(
+                            () -> processFilterItem(index, task.getId(), businessResumeId, jdText, apiKey, useSiliconFlow),
+                            llmExecutor
+                    ));
                 }
-                updateProgress(status, successCount, failedCount, errorBuilder);
+                for (CompletableFuture<FilterItemResult> future : futures) {
+                    FilterItemResult result = future.join();
+                    if (result.success) {
+                        successCount++;
+                    } else {
+                        failedCount++;
+                        appendError(errorBuilder, result.index, result.error);
+                    }
+                    updateProgress(status, successCount, failedCount, errorBuilder);
+                    logCheckpointIfNeeded(
+                            "PERF_HARD_FILTER_CHECKPOINT",
+                            status.getTaskId(),
+                            filterTaskId,
+                            startedAtMs,
+                            total,
+                            successCount,
+                            failedCount,
+                            llmThreads,
+                            batchSize,
+                            effectiveParallelism,
+                            llmQueueCapacity,
+                            checkpointLogged
+                    );
+                }
             }
 
-            int total = resumeIdList.size();
             if (successCount == total) {
                 status.setStatus(STATUS_SUCCESS);
             } else if (successCount == 0) {
@@ -165,7 +246,46 @@ public class DeepseekFilterService {
             status.setSuccessCount(successCount);
             status.setFailedCount(failedCount);
         } finally {
-            status.setEndedAtMs(System.currentTimeMillis());
+            long endedAtMs = System.currentTimeMillis();
+            long elapsedMs = Math.max(0L, endedAtMs - startedAtMs);
+            int processedCount = successCount + failedCount;
+            status.setEndedAtMs(endedAtMs);
+            perfLog.info(
+                    "PERF_HARD_FILTER_SUMMARY businessTaskId={} filterTaskId={} status={} total={} processed={} success={} failed={} llmThreads={} batchSize={} effectiveParallelism={} queueCapacity={} elapsedMs={} avgMsPerResume={} throughputPerMin={}",
+                    status.getTaskId(),
+                    filterTaskId,
+                    status.getStatus(),
+                    total,
+                    processedCount,
+                    successCount,
+                    failedCount,
+                    llmThreads,
+                    batchSize,
+                    effectiveParallelism,
+                    llmQueueCapacity,
+                    elapsedMs,
+                    formatDecimal(processedCount == 0 ? 0D : (double) elapsedMs / processedCount),
+                    formatDecimal(elapsedMs == 0 ? 0D : processedCount * 60000D / elapsedMs)
+            );
+        }
+    }
+
+    private FilterItemResult processFilterItem(int index,
+                                               Long taskDbId,
+                                               String businessResumeId,
+                                               String jdText,
+                                               String apiKey,
+                                               boolean useSiliconFlow) {
+        try {
+            JsonNode resumePayload = buildResumePayloadFromResumeTable(businessResumeId);
+            JsonNode analysis = deepseekBaseService.jdHardFilterAnalyze(apiKey, jdText, resumePayload, useSiliconFlow);
+            boolean pass = computePassFromDimensions(analysis);
+            String analysisJson = objectMapper.writeValueAsString(analysis);
+            upsertResult(taskDbId, businessResumeId, pass, analysisJson);
+            return FilterItemResult.success(index);
+        } catch (Exception e) {
+            upsertResult(taskDbId, businessResumeId, false, toErrorJson(e));
+            return FilterItemResult.failed(index, e.getMessage());
         }
     }
 
@@ -255,8 +375,74 @@ public class DeepseekFilterService {
         upsertResult(taskDbId, businessResumeId.trim(), false, analysisJson);
     }
 
+    private static class FilterItemResult {
+        private final int index;
+        private final boolean success;
+        private final String error;
+
+        private FilterItemResult(int index, boolean success, String error) {
+            this.index = index;
+            this.success = success;
+            this.error = error;
+        }
+
+        static FilterItemResult success(int index) {
+            return new FilterItemResult(index, true, null);
+        }
+
+        static FilterItemResult failed(int index, String error) {
+            return new FilterItemResult(index, false, error);
+        }
+    }
+
+    private static String formatDecimal(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
+    }
+
+    private void logCheckpointIfNeeded(String eventName,
+                                       String businessTaskId,
+                                       String filterTaskId,
+                                       long startedAtMs,
+                                       int total,
+                                       int successCount,
+                                       int failedCount,
+                                       int llmThreads,
+                                       int batchSize,
+                                       int effectiveParallelism,
+                                       int queueCapacity,
+                                       boolean[] checkpointLogged) {
+        int processedCount = successCount + failedCount;
+        long now = System.currentTimeMillis();
+        long elapsedMs = Math.max(0L, now - startedAtMs);
+        for (int i = 0; i < PERF_CHECKPOINTS.length; i++) {
+            int checkpoint = PERF_CHECKPOINTS[i];
+            if (!checkpointLogged[i] && processedCount >= checkpoint) {
+                checkpointLogged[i] = true;
+                perfLog.info(
+                        "{} businessTaskId={} filterTaskId={} checkpoint={} total={} processed={} success={} failed={} llmThreads={} batchSize={} effectiveParallelism={} queueCapacity={} elapsedMs={} avgMsPerResume={} throughputPerMin={}",
+                        eventName,
+                        businessTaskId,
+                        filterTaskId,
+                        checkpoint,
+                        total,
+                        processedCount,
+                        successCount,
+                        failedCount,
+                        llmThreads,
+                        batchSize,
+                        effectiveParallelism,
+                        queueCapacity,
+                        elapsedMs,
+                        formatDecimal(processedCount == 0 ? 0D : (double) elapsedMs / processedCount),
+                        formatDecimal(elapsedMs == 0 ? 0D : processedCount * 60000D / elapsedMs)
+                );
+            }
+        }
+    }
+
     @PreDestroy
     public void shutdown() {
         executor.shutdown();
+        llmExecutor.shutdown();
     }
 }

@@ -1,8 +1,11 @@
 package com.app.service.repository;
 
+import com.app.dao.ResumeDAO;
 import com.app.dao.TaskDAO;
+import com.app.dao.TextDAO;
 import com.app.dto.TextDTO;
 import com.app.dto.TaskUploadResponseDTO;
+import com.app.entity.ResumeDO;
 import com.app.entity.TextDO;
 import com.app.entity.TaskDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -11,18 +14,26 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class TaskService {
     private final TaskDAO taskDAO;
     private final TextService textService;
+    private final TextDAO textDAO;
+    private final ResumeDAO resumeDAO;
 
     public TaskService(TaskDAO taskDAO,
-                       TextService textService) {
+                       TextService textService,
+                       TextDAO textDAO,
+                       ResumeDAO resumeDAO) {
         this.taskDAO = taskDAO;
         this.textService = textService;
+        this.textDAO = textDAO;
+        this.resumeDAO = resumeDAO;
     }
 
     /**
@@ -101,5 +112,32 @@ public class TaskService {
                 .set(TaskDO::getSubmitted, submitted)
                 .set(TaskDO::getUpdateTime, LocalDateTime.now()));
         return affected > 0;
+    }
+
+    @Transactional
+    public boolean deleteByBusinessTaskId(String taskId) {
+        TaskDO task = getByBusinessTaskId(taskId);
+        if (task == null) {
+            return false;
+        }
+
+        List<TextDO> textRows = textDAO.selectList(new LambdaQueryWrapper<TextDO>()
+                .eq(TextDO::getTaskId, task.getId()));
+        Set<String> resumeIds = new LinkedHashSet<>();
+        for (TextDO textRow : textRows) {
+            String resumeId = textRow.getResumeId();
+            if (resumeId != null && !resumeId.isBlank()) {
+                resumeIds.add(resumeId);
+            }
+        }
+
+        // 数据库设置了连带删除
+        taskDAO.deleteById(task.getId());
+
+        if (!resumeIds.isEmpty()) {
+            resumeDAO.delete(new LambdaQueryWrapper<ResumeDO>()
+                    .in(ResumeDO::getResumeId, resumeIds));
+        }
+        return true;
     }
 }

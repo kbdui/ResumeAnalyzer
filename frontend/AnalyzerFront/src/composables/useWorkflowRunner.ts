@@ -22,6 +22,7 @@ export function useWorkflowRunner() {
   const topK = ref(20)
   const recallK = ref(200)
   const extractBatchSize = ref(5)
+  const hardFilterBatchSize = ref(5)
   const analyzeBatchSize = ref(5)
   const runningPipeline = ref(false)
   const runningExtract = ref(false)
@@ -137,7 +138,11 @@ export function useWorkflowRunner() {
     if (!jdText.value.trim()) throw new Error('请输入岗位 JD 文本')
     runningHardFilter.value = true
     try {
-      const hardFilterResp = await submitHardFilterTask(taskId.value, { jdText: jdText.value.trim() })
+      const hardFilterResp = await submitHardFilterTask(
+        taskId.value,
+        { jdText: jdText.value.trim() },
+        Math.floor(hardFilterBatchSize.value),
+      )
       hardFilterTaskId.value = hardFilterResp.analyzeTaskId
       await pollTaskStatus(hardFilterTaskId, hardFilterStatus, queryHardFilterTask)
     } finally {
@@ -217,6 +222,7 @@ export function useWorkflowRunner() {
     topK,
     recallK,
     extractBatchSize,
+    hardFilterBatchSize,
     analyzeBatchSize,
     runningPipeline,
     runningExtract,
@@ -244,4 +250,3 @@ export function useWorkflowRunner() {
     refreshFinalOutputs,
   }
 }
-

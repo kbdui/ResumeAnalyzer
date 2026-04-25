@@ -39,7 +39,11 @@ const activeMenuPath = computed(() => {
     <el-main class="app-main">
       <div class="page-shell">
         <!-- 配合 index.ts 监测路由切换 -->
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <KeepAlive>
+            <component :is="Component" />
+          </KeepAlive>
+        </RouterView>
       </div>
     </el-main>
   </el-container>

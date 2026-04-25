@@ -13,9 +13,9 @@ import com.app.service.repository.HybridResultService;
 import com.app.service.repository.JdExtractService;
 import com.app.service.repository.TaskService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import tools.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -52,12 +52,14 @@ public class ResumeHybridService {
     }
 
     /**
-     * 按业务 taskId 提交 Python 匹配任务，返回 pythonTaskId
+     * 按业务 taskId 提交 Python 匹配任务，返回 pythonTaskId。
      */
     public String submitByTaskId(String taskId, String jdText, Integer topK, Integer recallK) throws IOException {
         if (jdText == null || jdText.isBlank()) {
             throw new IllegalArgumentException("jdText 不能为空");
         }
+        String normalizedJdText = jdText.trim();
+
         TaskDO task = taskService.getByBusinessTaskId(taskId);
         if (task == null) {
             throw new IllegalArgumentException("task 不存在: " + taskId);
@@ -68,7 +70,7 @@ public class ResumeHybridService {
                 .eq(TaskResumeDO::getPass, Boolean.TRUE)
                 .orderByAsc(TaskResumeDO::getId));
         if (passedRows == null || passedRows.isEmpty()) {
-            throw new IllegalArgumentException("task 下没有通过硬过滤的简历（task_resume.pass=1）: " + taskId);
+            throw new IllegalArgumentException("task 下没有通过硬过滤的简历(task_resume.pass=1): " + taskId);
         }
 
         List<TextDTO> resumes = new ArrayList<>(passedRows.size());
@@ -94,19 +96,7 @@ public class ResumeHybridService {
             throw new IllegalArgumentException("通过硬过滤的简历在 text 表中无有效正文: " + taskId);
         }
 
-        // 先通过 LLM 从 JD 中抽取结构化关键词并落库，再将关键词一并传给 Python 匹配服务。
-        JsonNode keywordRoot = deepseekBaseService.extractHybridJdKeywords(deepseekApiKey, jdText.trim(), true);
-        String workKeywords = keywordRoot.path("work_experience_keywords").asText("").trim();
-        String skillsKeywords = keywordRoot.path("skills_keywords").asText("").trim();
-        String educationKeywords = keywordRoot.path("education_keywords").asText("").trim();
-
-        JdExtractDO jdExtract = jdExtractService.upsertByTaskId(
-                task.getId(),
-                jdText.trim(),
-                workKeywords,
-                skillsKeywords,
-                educationKeywords
-        );
+        JdExtractDO jdExtract = resolveJdExtract(task.getId(), normalizedJdText);
         if (jdExtract == null) {
             throw new IllegalStateException("JD 关键词提取结果保存失败");
         }
@@ -127,8 +117,43 @@ public class ResumeHybridService {
         return pythonTaskId;
     }
 
+    private JdExtractDO resolveJdExtract(Long taskDbId, String jdText) throws IOException {
+        JdExtractDO existing = jdExtractService.getByTaskId(taskDbId);
+        if (isUsableJdExtract(existing, jdText)) {
+            return existing;
+        }
+
+        JsonNode keywordRoot = deepseekBaseService.extractHybridJdKeywords(deepseekApiKey, jdText, true);
+        String workKeywords = keywordRoot.path("work_experience_keywords").asText("").trim();
+        String skillsKeywords = keywordRoot.path("skills_keywords").asText("").trim();
+        String educationKeywords = keywordRoot.path("education_keywords").asText("").trim();
+        return jdExtractService.upsertByTaskId(
+                taskDbId,
+                jdText,
+                workKeywords,
+                skillsKeywords,
+                educationKeywords
+        );
+    }
+
+    private boolean isUsableJdExtract(JdExtractDO jdExtract, String jdText) {
+        if (jdExtract == null) {
+            return false;
+        }
+        if (jdExtract.getJdText() == null || !jdText.equals(jdExtract.getJdText().trim())) {
+            return false;
+        }
+        return hasText(jdExtract.getWorkExperienceKeywords())
+                || hasText(jdExtract.getSkillsKeywords())
+                || hasText(jdExtract.getEducationKeywords());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
     /**
-     * 查询 Python 任务，并按约定维护 hybrid_result
+     * 查询 Python 任务，并按约定维护 hybrid_result。
      */
     public JsonNode queryAndStoreResult(String taskId) throws IOException {
         TaskDO task = taskService.getByBusinessTaskId(taskId);

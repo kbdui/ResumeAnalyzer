@@ -23,6 +23,8 @@ export interface PythonTaskItem {
   keyword_coverage: number
   top_terms: string[]
   embedding_score: number
+  raw_final_score?: number
+  display_score?: number
   final_score: number
 }
 

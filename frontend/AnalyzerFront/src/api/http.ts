@@ -1,6 +1,6 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5555'
 
-type RequestMethod = 'GET' | 'POST'
+type RequestMethod = 'GET' | 'POST' | 'DELETE'
 
 interface ApiResponse<T> {
   code: number
@@ -39,6 +39,10 @@ export function get<T>(path: string): Promise<T> {
 
 export function post<T>(path: string, body?: unknown): Promise<T> {
   return request<T>('POST', path, body)
+}
+
+export function del<T>(path: string): Promise<T> {
+  return request<T>('DELETE', path)
 }
 
 export { BASE_URL }

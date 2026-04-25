@@ -27,6 +27,7 @@ backend/AnalyzerBack/dist/
 backend/AnalyzerBack/nbdist/
 backend/AnalyzerBack/.nb-gradle/
 backend/AnalyzerBack/build/
+backend/AnalyzerBack/logs/
 !**/src/main/**/build/
 !**/src/test/**/build/
 

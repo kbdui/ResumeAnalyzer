@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import JsonViewer from '@/components/JsonViewer.vue'
 import WorkflowUploadCard from '@/components/workflow/WorkflowUploadCard.vue'
@@ -17,6 +17,7 @@ const {
   topK,
   recallK,
   extractBatchSize,
+  hardFilterBatchSize,
   analyzeBatchSize,
   runningPipeline,
   runningExtract,
@@ -62,6 +63,10 @@ function setRecallK(value: number) {
 
 function setExtractBatchSize(value: number) {
   extractBatchSize.value = value
+}
+
+function setHardFilterBatchSize(value: number) {
+  hardFilterBatchSize.value = value
 }
 
 function setAnalyzeBatchSize(value: number) {
@@ -118,6 +123,10 @@ function formatMaybeScore(value: unknown) {
   }
   return n.toFixed(3)
 }
+
+function formatDisplayScore(row: { display_score?: number; final_score?: number | null }) {
+  return formatScore(row.display_score ?? row.final_score)
+}
 </script>
 
 <template>
@@ -156,10 +165,12 @@ function formatMaybeScore(value: unknown) {
       <el-col :xs="24" :md="12">
         <StepHardFilterPanel
           :current-task-id="taskId"
+          :batch-size="hardFilterBatchSize"
           :running="runningHardFilter"
           :action-disabled="runningAnyStep"
           :task-ref-id="hardFilterTaskId"
           :status-data="hardFilterStatus"
+          @update:batch-size="setHardFilterBatchSize"
           @run="runStep(runHardFilterStep, '硬过滤完成')"
         />
       </el-col>
@@ -200,11 +211,17 @@ function formatMaybeScore(value: unknown) {
         <el-table-column prop="resume_id" label="简历ID" min-width="180" />
         <el-table-column prop="file_name" label="文件名" min-width="180" />
         <el-table-column prop="final_score" label="综合分" width="120">
-          <template #default="{ row }">{{ formatScore(row.final_score) }}</template>
+          <template #default="{ row }">{{ formatDisplayScore(row) }}</template>
         </el-table-column>
-        <el-table-column prop="work_experience_score" label="工作经验分" width="120" />
-        <el-table-column prop="skills_score" label="技能分" width="100" />
-        <el-table-column prop="education_score" label="教育分" width="100" />
+        <el-table-column prop="work_experience_score" label="工作经验分" width="120">
+          <template #default="{ row }">{{ formatScore(row.work_experience_score) }}</template>
+        </el-table-column>
+        <el-table-column prop="skills_score" label="技能分" width="100">
+          <template #default="{ row }">{{ formatScore(row.skills_score) }}</template>
+        </el-table-column>
+        <el-table-column prop="education_score" label="教育分" width="100">
+          <template #default="{ row }">{{ formatScore(row.education_score) }}</template>
+        </el-table-column>
       </el-table>
     </el-card>
 

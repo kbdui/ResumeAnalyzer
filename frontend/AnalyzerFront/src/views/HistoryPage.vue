@@ -1,13 +1,15 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { DataAnalysis, Search } from '@element-plus/icons-vue'
 import TaskSelector from '@/components/TaskSelector.vue'
 import JsonViewer from '@/components/JsonViewer.vue'
-import { listAnalysisByTask, listExtractedResumeByTask, listTaskResumeByTask, queryMatchTask } from '@/api'
+import { deleteTask, listAnalysisByTask, listExtractedResumeByTask, listTaskResumeByTask, queryMatchTask } from '@/api'
+import type { Action } from 'element-plus'
 import type { AnalysisItem, ExtractedResumeItem, PythonTaskItem, PythonTaskResultPayload, TaskResumeItem } from '@/api/types'
 
 const taskId = ref('')
+const taskSelectorKey = ref(0)
 const loading = ref(false)
 const matchResult = ref<PythonTaskResultPayload | null>(null)
 const analysisRows = ref<AnalysisItem[]>([])
@@ -67,6 +69,10 @@ function formatMaybeScore(value: unknown) {
   return n.toFixed(3)
 }
 
+function formatDisplayScore(row: { display_score?: number; final_score?: number | null }) {
+  return formatScore(row.display_score ?? row.final_score)
+}
+
 function openResumeDetail(row: ExtractedResumeItem) {
   selectedResumeDetail.value = row
   resumeDetailDialogVisible.value = true
@@ -93,6 +99,22 @@ const parsedTaskResumeRows = computed(() =>
     return { ...r, parsed }
   }),
 )
+
+function resetHistoryState() {
+  taskId.value = ''
+  matchResult.value = null
+  analysisRows.value = []
+  extractedResumeRows.value = []
+  taskResumeRows.value = []
+  selectedResumeDetail.value = null
+  selectedHardFilterDetail.value = null
+  resumeDetailDialogVisible.value = false
+  hardFilterDetailDialogVisible.value = false
+  matchPage.value = 1
+  extractedPage.value = 1
+  hardFilterPage.value = 1
+  analysisPage.value = 1
+}
 
 async function queryHistory() {
   if (!taskId.value) {
@@ -136,6 +158,40 @@ async function queryHistory() {
     ElMessage.success('历史记录查询完成')
   }
 }
+async function removeCurrentTask() {
+  if (!taskId.value) {
+    ElMessage.warning('请先选择 task')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(`确认删除任务 ${taskId.value} 及其关联数据吗？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch (error) {
+    const action = error as Action
+    if (action === 'cancel' || action === 'close') {
+      return
+    }
+    ElMessage.error((error as Error).message || '删除确认失败')
+    return
+  }
+
+  loading.value = true
+  const currentTaskId = taskId.value
+  try {
+    await deleteTask(currentTaskId)
+    resetHistoryState()
+    taskSelectorKey.value += 1
+    ElMessage.success('任务已删除')
+  } catch (error) {
+    ElMessage.error((error as Error).message || '删除失败')
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <template>
@@ -147,11 +203,16 @@ async function queryHistory() {
           <span>历史记录查询</span>
         </div>
       </template>
-      <TaskSelector v-model="taskId" />
-      <el-button class="mt12" type="primary" :loading="loading" @click="queryHistory">
-        <el-icon><Search /></el-icon>
-        查询
-      </el-button>
+      <TaskSelector :key="taskSelectorKey" v-model="taskId" />
+      <el-space class="mt12" wrap>
+        <el-button type="primary" :loading="loading" @click="queryHistory">
+          <el-icon><Search /></el-icon>
+          查询
+        </el-button>
+        <el-button type="danger" plain :loading="loading" :disabled="!taskId" @click="removeCurrentTask">
+          删除任务
+        </el-button>
+      </el-space>
     </el-card>
 
     <el-card class="panel-card">
@@ -234,7 +295,7 @@ async function queryHistory() {
         <el-table-column prop="resume_id" label="简历ID" min-width="180" />
         <el-table-column prop="file_name" label="文件名" min-width="180" />
         <el-table-column prop="final_score" label="综合分" width="120">
-          <template #default="{ row }">{{ formatScore(row.final_score) }}</template>
+          <template #default="{ row }">{{ formatDisplayScore(row) }}</template>
         </el-table-column>
       </el-table>
       <el-pagination
@@ -340,7 +401,7 @@ async function queryHistory() {
           <template #default="{ row }">{{ getDimValue(row.key, 'status') || '-' }}</template>
         </el-table-column>
         <el-table-column label="置信度" width="100">
-          <template #default="{ row }">{{ getDimValue(row.key, 'confidence') ?? '-' }}</template>
+          <template #default="{ row }">{{ formatMaybeScore(getDimValue(row.key, 'confidence')) }}</template>
         </el-table-column>
         <el-table-column label="分析理由" min-width="280" show-overflow-tooltip>
           <template #default="{ row }">{{ getDimValue(row.key, 'reason') || '-' }}</template>
@@ -366,4 +427,3 @@ async function queryHistory() {
 .pager { margin-top: 12px; justify-content: flex-end; }
 .muted { color: #606266; margin-top: 4px; }
 </style>
-

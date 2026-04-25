@@ -1,19 +1,26 @@
 package com.app.web;
 
-import com.app.dto.ResumeDTO;
 import com.app.dto.AnalyzeSubmitResponseDTO;
 import com.app.dto.AnalyzeTaskStatusDTO;
+import com.app.dto.ResumeDTO;
 import com.app.request.ChatRequest;
 import com.app.request.JdHardFilterRequest;
-import com.app.service.DeepseekBaseService;
-import com.app.service.repository.ResumeService;
 import com.app.service.DeepseekAnalyzeService;
+import com.app.service.DeepseekBaseService;
 import com.app.service.DeepseekExtractService;
 import com.app.service.DeepseekFilterService;
+import com.app.service.repository.ResumeService;
 import com.app.tool.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -45,10 +52,6 @@ public class DeepseekController {
         this.deepseekFilterService = deepseekFilterService;
     }
 
-    /**
-     * 简单对话：发送问题，返回大模型回复
-     * 请求体 JSON: { "message": "你的问题" }
-     */
     @PostMapping("/chat")
     public ApiResponse<String> chat(@RequestBody ChatRequest request) {
         if (request == null || request.getMessage() == null || request.getMessage().isBlank()) {
@@ -62,9 +65,6 @@ public class DeepseekController {
         }
     }
 
-    /**
-     * 整理分析上传简历内的信息
-     */
     @PostMapping("/extract")
     public ApiResponse<ResumeDTO> extractResumeDetail(
             @RequestParam("file") MultipartFile file,
@@ -77,13 +77,10 @@ public class DeepseekController {
             }
             return ApiResponse.success(result);
         } catch (IOException e) {
-            return ApiResponse.error(500, "简历分析失败: " + e.getMessage());
+            return ApiResponse.error(500, "简历解析失败: " + e.getMessage());
         }
     }
 
-    /**
-     * 提交 task 下筛选简历给大模型进行异步批量提取
-     */
     @PostMapping("/{taskId}/extract")
     public ApiResponse<AnalyzeSubmitResponseDTO> submitExtractTask(
             @PathVariable("taskId") String taskId,
@@ -105,33 +102,36 @@ public class DeepseekController {
             AnalyzeSubmitResponseDTO response = new AnalyzeSubmitResponseDTO();
             response.setAnalyzeTaskId(analyzeTaskId);
             response.setTaskId(taskId);
-            response.setMessage("提交成功");
+            response.setMessage("提取任务已提交");
             return ApiResponse.success(response);
         } catch (IllegalArgumentException e) {
             return ApiResponse.error(400, e.getMessage());
         }
     }
 
-    /**
-     * 异步提交 JD 硬过滤
-     */
     @PostMapping("/{taskId}/hard-filter")
     public ApiResponse<AnalyzeSubmitResponseDTO> submitHardFilterByJd(
             @PathVariable("taskId") String taskId,
             @RequestBody JdHardFilterRequest body,
-            @RequestParam(value = "model", defaultValue = "v3") String model) {
+            @RequestParam(value = "model", defaultValue = "v3") String model,
+            @RequestParam(value = "batchSize", defaultValue = "5") Integer batchSize) {
         if (taskId == null || taskId.isBlank()) {
             return ApiResponse.error(400, "taskId 不能为空");
         }
         if (body == null || body.getJdText() == null || body.getJdText().isBlank()) {
             return ApiResponse.error(400, "jdText 不能为空");
         }
+        if (batchSize == null || batchSize < 1) {
+            return ApiResponse.error(400, "batchSize 必须 >= 1");
+        }
         try {
             String filterTaskId = deepseekFilterService.submitHardFilterTask(
                     taskId,
                     body.getJdText().trim(),
                     apiKey,
-                    Objects.equals(model, "v3"));
+                    Objects.equals(model, "v3"),
+                    batchSize
+            );
             AnalyzeSubmitResponseDTO response = new AnalyzeSubmitResponseDTO();
             response.setAnalyzeTaskId(filterTaskId);
             response.setTaskId(taskId);
@@ -142,9 +142,6 @@ public class DeepseekController {
         }
     }
 
-    /**
-     * 将 hybrid_result 提交给 LLM 做最终评估分析，并入库 analysis 表
-     */
     @PostMapping("/{taskId}/analyze")
     public ApiResponse<AnalyzeSubmitResponseDTO> submitFinalAnalyzeTask(
             @PathVariable("taskId") String taskId,
@@ -166,16 +163,13 @@ public class DeepseekController {
             AnalyzeSubmitResponseDTO response = new AnalyzeSubmitResponseDTO();
             response.setAnalyzeTaskId(analyzeTaskId);
             response.setTaskId(taskId);
-            response.setMessage("最终评估任务已提交");
+            response.setMessage("评估任务已提交");
             return ApiResponse.success(response);
         } catch (IllegalArgumentException e) {
             return ApiResponse.error(400, e.getMessage());
         }
     }
 
-    /**
-     * 查询 extract 任务进度
-     */
     @GetMapping("/extract/{extractTaskId}")
     public ApiResponse<AnalyzeTaskStatusDTO> getExtractTaskStatus(@PathVariable("extractTaskId") String extractTaskId) {
         AnalyzeTaskStatusDTO status = deepseekExtractService.getExtractTaskStatus(extractTaskId);
@@ -185,9 +179,6 @@ public class DeepseekController {
         return ApiResponse.success(status);
     }
 
-    /**
-     * 查询 JD 硬过滤任务进度
-     */
     @GetMapping("/hard-filter/{hardFilterTaskId}")
     public ApiResponse<AnalyzeTaskStatusDTO> getHardFilterTaskStatus(@PathVariable("hardFilterTaskId") String hardFilterTaskId) {
         if (hardFilterTaskId == null || hardFilterTaskId.isBlank()) {
@@ -200,9 +191,6 @@ public class DeepseekController {
         return ApiResponse.success(status);
     }
 
-    /**
-     * 查询 analyze 任务进度
-     */
     @GetMapping("/analyze/{analyzeTaskId}")
     public ApiResponse<AnalyzeTaskStatusDTO> getAnalyzeTaskStatus(@PathVariable("analyzeTaskId") String analyzeTaskId) {
         AnalyzeTaskStatusDTO status = deepseekAnalyzeService.getAnalyzeTaskStatus(analyzeTaskId);
@@ -211,5 +199,4 @@ public class DeepseekController {
         }
         return ApiResponse.success(status);
     }
-
 }

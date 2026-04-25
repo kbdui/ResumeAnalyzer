@@ -41,13 +41,17 @@ deepseek:
     batch:
       max-size: 20
     llm:
-      executor-threads: 5
+      executor-threads: 8
       queue-capacity: 200
   analyze:
     batch:
       max-size: 20
     llm:
       executor-threads: 5
+      queue-capacity: 200
+  filter:
+    llm:
+      executor-threads: 8
       queue-capacity: 200
 
 # java端传向的FastAPI端口

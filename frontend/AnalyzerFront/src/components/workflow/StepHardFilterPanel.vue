@@ -6,6 +6,7 @@ import WorkflowStepCard from './WorkflowStepCard.vue'
 
 const props = defineProps<{
   currentTaskId?: string
+  batchSize: number
   running: boolean
   actionDisabled: boolean
   taskRefId?: string
@@ -13,6 +14,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (e: 'update:batchSize', value: number): void
   (e: 'run'): void
 }>()
 
@@ -49,6 +51,15 @@ const progress = computed(() => {
       :closable="false"
     />
     <el-text type="info">本步骤使用流程上下文中的 JD 文本</el-text>
+    <div class="batch-row">
+      <el-text type="info">hard-filter batchSize</el-text>
+      <el-input-number
+        :model-value="props.batchSize"
+        :min="1"
+        class="batch-input"
+        @update:model-value="(v: number | string | undefined) => emit('update:batchSize', Number(v || 1))"
+      />
+    </div>
     <el-space wrap>
       <el-button type="primary" :loading="props.running" :disabled="props.actionDisabled" @click="emit('run')">
         执行 Step 3
@@ -61,3 +72,16 @@ const progress = computed(() => {
     <JsonViewer :data="props.statusData" />
   </el-dialog>
 </template>
+
+<style scoped>
+.batch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.batch-input {
+  width: 220px;
+}
+</style>
