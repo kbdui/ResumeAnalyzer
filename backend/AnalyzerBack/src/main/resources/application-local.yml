@@ -26,7 +26,7 @@ spring:
 # DeepSeek 客户端配置（API 地址、超时、模型名）
 deepseek:
   client:
-    api-url: https://api.deepseek.com/v1/chat/completions
+    api-url: https://api.deepseek.com/chat/completions
     connect-timeout: 30   # 连接超时（秒）
     read-timeout: 120     # 读取超时（秒）
     write-timeout: 30     # 写入超时（秒）
@@ -35,13 +35,13 @@ deepseek:
     retry-backoff-ms: 1000
     retry-max-backoff-ms: 8000
     model:
-      chat: deepseek-chat
-      reasoner: deepseek-reasoner   # useSiliconFlow 时使用
+      V4flash: deepseek-v4-flash
+      V4pro: deepseek-v4-pro   # useSiliconFlow 时使用
   extract:
     batch:
       max-size: 20
     llm:
-      executor-threads: 8
+      executor-threads: 4
       queue-capacity: 200
   analyze:
     batch:
@@ -51,7 +51,7 @@ deepseek:
       queue-capacity: 200
   filter:
     llm:
-      executor-threads: 8
+      executor-threads: 4
       queue-capacity: 200
 
 # java端传向的FastAPI端口

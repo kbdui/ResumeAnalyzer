@@ -60,10 +60,10 @@ public class DeepseekClientProperties {
         /**
          * 普通对话模型
          */
-        private String chat;
+        private String V4flash;
         /**
          * 推理模型
          */
-        private String reasoner;
+        private String V4pro;
     }
 }

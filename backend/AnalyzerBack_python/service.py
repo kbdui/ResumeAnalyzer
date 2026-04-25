@@ -310,11 +310,11 @@ def _rerank_stage(candidates: List[Dict[str, Any]], jd_text: Dict[str, Any], top
             )
         else:
             final_score = (
-                # 0.30 * work_experience_score
-                # + 0.25 * skills_score
-                # + 0.15 * education_score
-                + 0.10 * full_text_score
-                # + 0.20 * embedding_score
+                0.10 * work_experience_score
+                + 0.10 * skills_score
+                + 0.10 * education_score
+                + 0.20 * full_text_score
+                + 0.50 * embedding_score
             )
 
         c["work_experience_score"] = float(work_experience_score)
