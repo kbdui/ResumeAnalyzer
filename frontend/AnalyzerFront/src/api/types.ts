@@ -23,6 +23,21 @@ export interface PythonTaskItem {
   keyword_coverage: number
   top_terms: string[]
   embedding_score: number
+  full_text_score?: number
+  work_experience_score?: number
+  project_score?: number
+  skills_score?: number
+  education_score?: number
+  summary_score?: number
+  experience_score?: number
+  skills_recall_score?: number
+  skills_coverage?: number
+  role_alignment_score?: number
+  role_alignment_reasons?: string[]
+  negative_penalty?: number
+  experience_reasons?: string[]
+  penalty_reasons?: string[]
+  segments?: Record<string, unknown>
   raw_final_score?: number
   display_score?: number
   final_score: number
@@ -49,6 +64,15 @@ export interface PythonTaskResultPayload {
       items: PythonTaskItem[]
     }
   } | null
+}
+
+export interface HybridResultItem {
+  id: number
+  taskId: number
+  status: string
+  resultJson?: string | null
+  createTime?: string
+  updateTime?: string
 }
 
 export interface AnalysisItem {

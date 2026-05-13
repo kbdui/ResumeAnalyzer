@@ -82,10 +82,14 @@ public class DeepseekAnalyzeService {
     }
 
     public String submitAnalyzeTask(String taskId, String apiKey, boolean useSiliconFlow) {
-        return submitAnalyzeTask(taskId, apiKey, useSiliconFlow, DEFAULT_BATCH_SIZE);
+        return submitAnalyzeTask(taskId, apiKey, useSiliconFlow, DEFAULT_BATCH_SIZE, null);
     }
 
     public String submitAnalyzeTask(String taskId, String apiKey, boolean useSiliconFlow, Integer batchSize) {
+        return submitAnalyzeTask(taskId, apiKey, useSiliconFlow, batchSize, null);
+    }
+
+    public String submitAnalyzeTask(String taskId, String apiKey, boolean useSiliconFlow, Integer batchSize, Integer analyzeCount) {
         String existingTaskId = findActiveAnalyzeTaskId(taskId);
         if (existingTaskId != null) {
             return existingTaskId;
@@ -109,6 +113,15 @@ public class DeepseekAnalyzeService {
             throw new IllegalArgumentException("hybrid_result 中未找到可分析的 items");
         }
 
+        int normalizedAnalyzeCount = analyzeCount == null ? items.size() : analyzeCount;
+        if (normalizedAnalyzeCount < 1) {
+            throw new IllegalArgumentException("analyzeCount 必须 >= 1");
+        }
+        if (normalizedAnalyzeCount > items.size()) {
+            throw new IllegalArgumentException("analyzeCount 不能大于通过召回筛选的简历数量，当前最多: " + items.size());
+        }
+        List<JsonNode> itemsToAnalyze = new ArrayList<>(items.subList(0, normalizedAnalyzeCount));
+
         int parallelBatchSize = (batchSize == null || batchSize < 1) ? DEFAULT_BATCH_SIZE : batchSize;
         if (parallelBatchSize > maxBatchSize) {
             throw new IllegalArgumentException("batchSize 不能大于 " + maxBatchSize + "，当前: " + parallelBatchSize);
@@ -119,7 +132,7 @@ public class DeepseekAnalyzeService {
         status.setAnalyzeTaskId(analyzeTaskId);
         status.setTaskId(taskId);
         status.setStatus(STATUS_QUEUED);
-        status.setTotal(items.size());
+        status.setTotal(itemsToAnalyze.size());
         status.setSuccessCount(0);
         status.setFailedCount(0);
         statusStore.put(analyzeTaskId, status);
@@ -128,7 +141,7 @@ public class DeepseekAnalyzeService {
                 analyzeTaskId,
                 task,
                 jdExtract.getJdText(),
-                items,
+                itemsToAnalyze,
                 apiKey,
                 useSiliconFlow,
                 parallelBatchSize

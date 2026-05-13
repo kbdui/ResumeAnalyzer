@@ -15,6 +15,9 @@ class MatchPipelineRequest(BaseModel):
     work_experience_keywords: str = ""
     skills_keywords: str = ""
     education_keywords: str = ""
+    project_keywords: str = ""
+    preferred_industries: str = ""
+    preferred_roles: str = ""
     resumes: List[ResumeDocument]
     top_k: int = 20
     recall_k: int = 200

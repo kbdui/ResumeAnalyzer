@@ -8,6 +8,7 @@ const props = defineProps<{
   currentTaskId?: string
   topK: number
   recallK: number
+  hardFilterPassedCount: number
   running: boolean
   actionDisabled: boolean
   resultData?: PythonTaskResultPayload | null
@@ -40,6 +41,7 @@ const summaryText = computed(() => {
       <el-descriptions-item label="状态">{{ statusText }}</el-descriptions-item>
       <el-descriptions-item label="摘要">{{ summaryText }}</el-descriptions-item>
     </el-descriptions>
+    <el-text type="info">通过硬过滤的简历数：{{ props.hardFilterPassedCount || 0 }}</el-text>
     <el-alert
       v-if="props.resultData?.error"
       title="执行错误"
@@ -50,21 +52,23 @@ const summaryText = computed(() => {
     />
     <el-row :gutter="12">
       <el-col :span="12">
-        <el-text type="info">topK</el-text>
-        <el-input-number
-          :model-value="props.topK"
-          :min="1"
-          class="full-input"
-          @update:model-value="(v: number | string | undefined) => emit('update:topK', Number(v || 1))"
-        />
-      </el-col>
-      <el-col :span="12">
         <el-text type="info">recallK</el-text>
         <el-input-number
           :model-value="props.recallK"
           :min="1"
+          :max="props.hardFilterPassedCount || undefined"
           class="full-input"
           @update:model-value="(v: number | string | undefined) => emit('update:recallK', Number(v || 1))"
+        />
+      </el-col>
+      <el-col :span="12">
+        <el-text type="info">topK</el-text>
+        <el-input-number
+          :model-value="props.topK"
+          :min="1"
+          :max="props.recallK || undefined"
+          class="full-input"
+          @update:model-value="(v: number | string | undefined) => emit('update:topK', Number(v || 1))"
         />
       </el-col>
     </el-row>

@@ -7,6 +7,8 @@ import WorkflowStepCard from './WorkflowStepCard.vue'
 const props = defineProps<{
   currentTaskId?: string
   batchSize: number
+  analyzeCount: number
+  recallSelectedCount: number
   running: boolean
   actionDisabled: boolean
   taskRefId?: string
@@ -15,6 +17,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:batchSize', value: number): void
+  (e: 'update:analyzeCount', value: number): void
   (e: 'run'): void
 }>()
 
@@ -50,6 +53,17 @@ const progress = computed(() => {
       show-icon
       :closable="false"
     />
+    <el-text type="info">通过召回筛选的简历数：{{ props.recallSelectedCount || 0 }}</el-text>
+    <div class="batch-row">
+      <el-text type="info">评估简历数量</el-text>
+      <el-input-number
+        :model-value="props.analyzeCount"
+        :min="1"
+        :max="props.recallSelectedCount || undefined"
+        class="batch-input"
+        @update:model-value="(v: number | string | undefined) => emit('update:analyzeCount', Number(v || 1))"
+      />
+    </div>
     <div class="batch-row">
       <el-text type="info">analyze batchSize</el-text>
       <el-input-number

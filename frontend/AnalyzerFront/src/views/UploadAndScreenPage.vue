@@ -19,6 +19,7 @@ const {
   extractBatchSize,
   hardFilterBatchSize,
   analyzeBatchSize,
+  analyzeCount,
   runningPipeline,
   runningExtract,
   runningHardFilter,
@@ -34,6 +35,8 @@ const {
   matchResult,
   analysisRows,
   matchItems,
+  taskResumePassCount,
+  recallSelectedCount,
   hasResult,
   parsedAnalysisRows,
   submitUpload,
@@ -71,6 +74,10 @@ function setHardFilterBatchSize(value: number) {
 
 function setAnalyzeBatchSize(value: number) {
   analyzeBatchSize.value = value
+}
+
+function setAnalyzeCount(value: number) {
+  analyzeCount.value = value
 }
 
 async function onUpload(file: File) {
@@ -182,6 +189,7 @@ function formatDisplayScore(row: { display_score?: number; final_score?: number 
           :current-task-id="taskId"
           :top-k="topK"
           :recall-k="recallK"
+          :hard-filter-passed-count="taskResumePassCount"
           :running="runningHybrid"
           :action-disabled="runningAnyStep"
           :result-data="matchResult"
@@ -194,11 +202,14 @@ function formatDisplayScore(row: { display_score?: number; final_score?: number 
         <StepAnalyzePanel
           :current-task-id="taskId"
           :batch-size="analyzeBatchSize"
+          :analyze-count="analyzeCount"
+          :recall-selected-count="recallSelectedCount"
           :running="runningAnalyze"
           :action-disabled="runningAnyStep"
           :task-ref-id="analyzeTaskId"
           :status-data="analyzeStatus"
           @update:batch-size="setAnalyzeBatchSize"
+          @update:analyze-count="setAnalyzeCount"
           @run="runStep(runAnalyzeStep, '大模型评估完成')"
         />
       </el-col>

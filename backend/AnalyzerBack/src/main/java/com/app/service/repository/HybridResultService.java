@@ -103,6 +103,7 @@ public class HybridResultService {
         if (normalized.contains("fail")
                 || normalized.contains("failed")
                 || normalized.contains("error")
+                || normalized.contains("not_found")
                 || normalized.contains("cancel")) {
             return STATUS_FAILED;
         }

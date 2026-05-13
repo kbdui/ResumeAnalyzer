@@ -4,6 +4,7 @@ import type {
   AnalyzeSubmitResponse,
   AnalyzeTaskStatus,
   ExtractedResumeItem,
+  HybridResultItem,
   PythonTaskResultPayload,
   TaskItem,
   TaskResumeItem,
@@ -37,6 +38,10 @@ export function queryMatchTask(taskId: string) {
   return get<PythonTaskResultPayload>(`/hybrid/match/task/${taskId}`)
 }
 
+export function listHybridResultsByTask(taskId: string) {
+  return get<HybridResultItem[]>(`/hybrid/${taskId}/results`)
+}
+
 export function submitExtractTask(taskId: string, batchSize = 5) {
   return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/extract?batchSize=${batchSize}`)
 }
@@ -53,12 +58,17 @@ export function queryHardFilterTask(hardFilterTaskId: string) {
   return get<AnalyzeTaskStatus>(`/deepseek/hard-filter/${hardFilterTaskId}`)
 }
 
-export function submitAnalyzeTask(taskId: string) {
-  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/analyze`)
+export function submitAnalyzeTask(taskId: string, analyzeCount?: number) {
+  const suffix = Number.isFinite(analyzeCount) ? `?analyzeCount=${Math.floor(analyzeCount as number)}` : ''
+  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/analyze${suffix}`)
 }
 
-export function submitAnalyzeTaskWithBatch(taskId: string, batchSize = 5) {
-  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/analyze?batchSize=${batchSize}`)
+export function submitAnalyzeTaskWithBatch(taskId: string, batchSize = 5, analyzeCount?: number) {
+  const params = new URLSearchParams({ batchSize: String(batchSize) })
+  if (Number.isFinite(analyzeCount)) {
+    params.set('analyzeCount', String(Math.floor(analyzeCount as number)))
+  }
+  return post<AnalyzeSubmitResponse>(`/deepseek/${taskId}/analyze?${params.toString()}`)
 }
 
 export function queryAnalyzeTask(analyzeTaskId: string) {

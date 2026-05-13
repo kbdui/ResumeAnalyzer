@@ -21,8 +21,10 @@ public class ResumeHybridRequest {
     private String workExperienceKeywords;
     private String skillsKeywords;
     private String educationKeywords;
+    private String projectKeywords;
+    private String preferredIndustries;
+    private String preferredRoles;
     private List<TextDTO> resumes;
     private Integer topK = 20;
     private Integer recallK = 200;
 }
-

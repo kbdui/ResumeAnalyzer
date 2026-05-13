@@ -1,6 +1,8 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import {
   listAnalysisByTask,
+  listHybridResultsByTask,
+  listTaskResumeByTask,
   queryExtractTask,
   queryAnalyzeTask,
   queryHardFilterTask,
@@ -11,9 +13,18 @@ import {
   submitMatchTask,
   uploadZip,
 } from '@/api'
-import type { AnalyzeTaskStatus, AnalysisItem, PythonTaskItem, PythonTaskResultPayload, UploadResponse } from '@/api/types'
+import type {
+  AnalyzeTaskStatus,
+  AnalysisItem,
+  HybridResultItem,
+  PythonTaskItem,
+  PythonTaskResultPayload,
+  UploadResponse,
+} from '@/api/types'
 
 export function useWorkflowRunner() {
+  let taskSelectionRefreshSeq = 0
+
   const uploadLoading = ref(false)
   const uploadResult = ref<UploadResponse | null>(null)
 
@@ -21,9 +32,10 @@ export function useWorkflowRunner() {
   const jdText = ref('')
   const topK = ref(20)
   const recallK = ref(200)
-  const extractBatchSize = ref(5)
-  const hardFilterBatchSize = ref(5)
-  const analyzeBatchSize = ref(5)
+  const extractBatchSize = ref(8)
+  const hardFilterBatchSize = ref(8)
+  const analyzeBatchSize = ref(8)
+  const analyzeCount = ref(20)
   const runningPipeline = ref(false)
   const runningExtract = ref(false)
   const runningHardFilter = ref(false)
@@ -47,8 +59,10 @@ export function useWorkflowRunner() {
   const analyzeStatus = ref<AnalyzeTaskStatus | null>(null)
   const matchResult = ref<PythonTaskResultPayload | null>(null)
   const analysisRows = ref<AnalysisItem[]>([])
+  const taskResumePassCount = ref(0)
 
   const matchItems = computed<PythonTaskItem[]>(() => matchResult.value?.result?.results?.items || [])
+  const recallSelectedCount = computed(() => matchResult.value?.result?.summary?.top_k || matchItems.value.length)
   const hasResult = computed(() => matchItems.value.length > 0 || analysisRows.value.length > 0)
   const parsedAnalysisRows = computed(() =>
     analysisRows.value.map((row) => {
@@ -62,15 +76,51 @@ export function useWorkflowRunner() {
     }),
   )
 
+  function normalizePositiveInt(value: number, fallback = 1) {
+    const n = Math.floor(Number(value))
+    return Number.isFinite(n) && n >= 1 ? n : fallback
+  }
+
+  function clampTopKAndRecallK() {
+    const normalizedRecall = normalizePositiveInt(recallK.value)
+    recallK.value = taskResumePassCount.value > 0 ? Math.min(normalizedRecall, taskResumePassCount.value) : normalizedRecall
+    topK.value = Math.min(normalizePositiveInt(topK.value), recallK.value)
+  }
+
+  function clampAnalyzeCount() {
+    const normalizedAnalyzeCount = normalizePositiveInt(analyzeCount.value)
+    analyzeCount.value = recallSelectedCount.value > 0 ? Math.min(normalizedAnalyzeCount, recallSelectedCount.value) : normalizedAnalyzeCount
+  }
+
   function ensureRunParams() {
     if (!taskId.value) throw new Error('请先选择 task')
     if (!jdText.value.trim()) throw new Error('请输入岗位 JD 文本')
     if (!Number.isFinite(topK.value) || topK.value < 1) throw new Error('topK 必须为正整数')
     if (!Number.isFinite(recallK.value) || recallK.value < 1) throw new Error('recallK 必须为正整数')
+    if (taskResumePassCount.value < 1) throw new Error('当前没有通过硬过滤的简历')
+    if (recallK.value > taskResumePassCount.value) throw new Error('recallK 不能大于通过硬过滤的简历数')
+    if (topK.value > recallK.value) throw new Error('topK 不能大于 recallK')
   }
 
   function sleep(ms: number) {
     return new Promise((resolve) => window.setTimeout(resolve, ms))
+  }
+
+  function parseStoredMatchResult(rows: HybridResultItem[]) {
+    const latest = rows.find((row) => row.resultJson && row.resultJson.trim())
+    if (!latest?.resultJson) {
+      return null
+    }
+    return JSON.parse(latest.resultJson) as PythonTaskResultPayload
+  }
+
+  async function refreshStoredMatchResult() {
+    if (!taskId.value) {
+      matchResult.value = null
+      return
+    }
+    const rows = await listHybridResultsByTask(taskId.value)
+    matchResult.value = parseStoredMatchResult(rows)
   }
 
   function ensureNoConcurrentStep() {
@@ -117,8 +167,66 @@ export function useWorkflowRunner() {
 
   async function refreshFinalOutputs() {
     if (!taskId.value) throw new Error('请先选择 task')
-    matchResult.value = await queryMatchTask(taskId.value)
+    await refreshStoredMatchResult()
     analysisRows.value = await listAnalysisByTask(taskId.value)
+    const taskResumes = await listTaskResumeByTask(taskId.value)
+    taskResumePassCount.value = taskResumes.filter((row) => row.pass).length
+    clampTopKAndRecallK()
+    clampAnalyzeCount()
+  }
+
+  async function refreshTaskResumePassCount() {
+    if (!taskId.value) return
+    const taskResumes = await listTaskResumeByTask(taskId.value)
+    taskResumePassCount.value = taskResumes.filter((row) => row.pass).length
+    clampTopKAndRecallK()
+  }
+
+  async function refreshCountsForTaskSelection(selectedTaskId: string) {
+    const currentSeq = ++taskSelectionRefreshSeq
+
+    try {
+      const taskResumes = await listTaskResumeByTask(selectedTaskId)
+      if (currentSeq !== taskSelectionRefreshSeq || taskId.value !== selectedTaskId) {
+        return
+      }
+      taskResumePassCount.value = taskResumes.filter((row) => row.pass).length
+      clampTopKAndRecallK()
+    } catch {
+      if (currentSeq !== taskSelectionRefreshSeq || taskId.value !== selectedTaskId) {
+        return
+      }
+      taskResumePassCount.value = 0
+      clampTopKAndRecallK()
+    }
+
+    try {
+      const rows = await listHybridResultsByTask(selectedTaskId)
+      if (currentSeq !== taskSelectionRefreshSeq || taskId.value !== selectedTaskId) {
+        return
+      }
+      matchResult.value = parseStoredMatchResult(rows)
+      clampAnalyzeCount()
+    } catch {
+      if (currentSeq !== taskSelectionRefreshSeq || taskId.value !== selectedTaskId) {
+        return
+      }
+      matchResult.value = null
+      clampAnalyzeCount()
+    }
+
+    try {
+      const rows = await listAnalysisByTask(selectedTaskId)
+      if (currentSeq !== taskSelectionRefreshSeq || taskId.value !== selectedTaskId) {
+        return
+      }
+      analysisRows.value = rows
+    } catch {
+      if (currentSeq !== taskSelectionRefreshSeq || taskId.value !== selectedTaskId) {
+        return
+      }
+      analysisRows.value = []
+    }
   }
 
   async function runExtractStepCore() {
@@ -145,12 +253,14 @@ export function useWorkflowRunner() {
       )
       hardFilterTaskId.value = hardFilterResp.analyzeTaskId
       await pollTaskStatus(hardFilterTaskId, hardFilterStatus, queryHardFilterTask)
+      await refreshTaskResumePassCount()
     } finally {
       runningHardFilter.value = false
     }
   }
 
   async function runHybridStepCore() {
+    await refreshTaskResumePassCount()
     ensureRunParams()
     runningHybrid.value = true
     try {
@@ -161,6 +271,8 @@ export function useWorkflowRunner() {
         recallK: Math.floor(recallK.value),
       })
       await pollMatchDone()
+      await refreshStoredMatchResult()
+      clampAnalyzeCount()
     } finally {
       runningHybrid.value = false
     }
@@ -168,9 +280,24 @@ export function useWorkflowRunner() {
 
   async function runAnalyzeStepCore() {
     if (!taskId.value) throw new Error('请先选择 task')
+    if (!matchResult.value || matchResult.value.status !== 'done') {
+      await refreshStoredMatchResult()
+    }
+    if (!matchResult.value || matchResult.value.status !== 'done') {
+      matchResult.value = await queryMatchTask(taskId.value)
+    }
+    if (recallSelectedCount.value < 1) throw new Error('当前没有通过召回筛选的简历')
+    clampAnalyzeCount()
+    if (analyzeCount.value > recallSelectedCount.value) {
+      throw new Error('评估简历数量不能大于通过召回筛选的简历数量')
+    }
     runningAnalyze.value = true
     try {
-      const analyzeResp = await submitAnalyzeTaskWithBatch(taskId.value, Math.floor(analyzeBatchSize.value))
+      const analyzeResp = await submitAnalyzeTaskWithBatch(
+        taskId.value,
+        Math.floor(analyzeBatchSize.value),
+        Math.floor(analyzeCount.value),
+      )
       analyzeTaskId.value = analyzeResp.analyzeTaskId
       await pollTaskStatus(analyzeTaskId, analyzeStatus, queryAnalyzeTask)
       analysisRows.value = await listAnalysisByTask(taskId.value)
@@ -201,7 +328,8 @@ export function useWorkflowRunner() {
 
   async function runFullPipeline() {
     ensureNoConcurrentStep()
-    ensureRunParams()
+    if (!taskId.value) throw new Error('请先选择 task')
+    if (!jdText.value.trim()) throw new Error('请输入岗位 JD 文本')
     runningPipeline.value = true
     try {
       await runExtractStepCore()
@@ -214,6 +342,27 @@ export function useWorkflowRunner() {
     }
   }
 
+  watch(taskId, (newTaskId) => {
+    taskSelectionRefreshSeq += 1
+    matchResult.value = null
+    analysisRows.value = []
+    taskResumePassCount.value = 0
+    clampTopKAndRecallK()
+    clampAnalyzeCount()
+
+    if (newTaskId) {
+      void refreshCountsForTaskSelection(newTaskId)
+    }
+  })
+
+  watch(taskResumePassCount, () => {
+    clampTopKAndRecallK()
+  })
+
+  watch(recallSelectedCount, () => {
+    clampAnalyzeCount()
+  })
+
   return {
     uploadLoading,
     uploadResult,
@@ -224,6 +373,7 @@ export function useWorkflowRunner() {
     extractBatchSize,
     hardFilterBatchSize,
     analyzeBatchSize,
+    analyzeCount,
     runningPipeline,
     runningExtract,
     runningHardFilter,
@@ -239,6 +389,8 @@ export function useWorkflowRunner() {
     matchResult,
     analysisRows,
     matchItems,
+    taskResumePassCount,
+    recallSelectedCount,
     hasResult,
     parsedAnalysisRows,
     submitUpload,

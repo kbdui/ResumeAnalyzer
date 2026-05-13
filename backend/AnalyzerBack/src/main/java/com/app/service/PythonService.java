@@ -98,6 +98,9 @@ public class PythonService {
             ((tools.jackson.databind.node.ObjectNode) root).set("work_experience_keywords", root.get("workExperienceKeywords"));
             ((tools.jackson.databind.node.ObjectNode) root).set("skills_keywords", root.get("skillsKeywords"));
             ((tools.jackson.databind.node.ObjectNode) root).set("education_keywords", root.get("educationKeywords"));
+            ((tools.jackson.databind.node.ObjectNode) root).set("project_keywords", root.get("projectKeywords"));
+            ((tools.jackson.databind.node.ObjectNode) root).set("preferred_industries", root.get("preferredIndustries"));
+            ((tools.jackson.databind.node.ObjectNode) root).set("preferred_roles", root.get("preferredRoles"));
             // taskId 仅用于 controller 层，不属于 Python payload
             ((tools.jackson.databind.node.ObjectNode) root).remove("taskId");
             ((tools.jackson.databind.node.ObjectNode) root).remove("jdText");
@@ -106,6 +109,9 @@ public class PythonService {
             ((tools.jackson.databind.node.ObjectNode) root).remove("workExperienceKeywords");
             ((tools.jackson.databind.node.ObjectNode) root).remove("skillsKeywords");
             ((tools.jackson.databind.node.ObjectNode) root).remove("educationKeywords");
+            ((tools.jackson.databind.node.ObjectNode) root).remove("projectKeywords");
+            ((tools.jackson.databind.node.ObjectNode) root).remove("preferredIndustries");
+            ((tools.jackson.databind.node.ObjectNode) root).remove("preferredRoles");
         }
         return root;
     }

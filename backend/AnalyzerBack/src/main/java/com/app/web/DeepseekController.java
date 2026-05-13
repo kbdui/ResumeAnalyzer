@@ -146,19 +146,24 @@ public class DeepseekController {
     public ApiResponse<AnalyzeSubmitResponseDTO> submitFinalAnalyzeTask(
             @PathVariable("taskId") String taskId,
             @RequestParam(value = "model", defaultValue = "v3") String model,
-            @RequestParam(value = "batchSize", defaultValue = "5") Integer batchSize) {
+            @RequestParam(value = "batchSize", defaultValue = "5") Integer batchSize,
+            @RequestParam(value = "analyzeCount", required = false) Integer analyzeCount) {
         if (taskId == null || taskId.isBlank()) {
             return ApiResponse.error(400, "taskId 不能为空");
         }
         if (batchSize == null || batchSize < 1) {
             return ApiResponse.error(400, "batchSize 必须 >= 1");
         }
+        if (analyzeCount != null && analyzeCount < 1) {
+            return ApiResponse.error(400, "analyzeCount 必须 >= 1");
+        }
         try {
             String analyzeTaskId = deepseekAnalyzeService.submitAnalyzeTask(
                     taskId,
                     apiKey,
                     Objects.equals(model, "v3"),
-                    batchSize
+                    batchSize,
+                    analyzeCount
             );
             AnalyzeSubmitResponseDTO response = new AnalyzeSubmitResponseDTO();
             response.setAnalyzeTaskId(analyzeTaskId);
